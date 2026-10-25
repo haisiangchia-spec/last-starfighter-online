@@ -36,6 +36,36 @@ function hexLine(a,b){const n=distance(a,b),line=[];for(let i=1;i<n;i++){
  line.push([rx,rz]);
 }return line}
 function blocked(a,b,rocks){return hexLine(a,b).some(([q,r])=>rocks.has(rockKey(q,r)))}
+// Shared asteroid resolution for 1v1 and 2v2: one check per entered hex.
+function asteroidCollision(ship,rocks,turn,side,step,speed,events){
+ if(!rocks.has(rockKey(ship.q,ship.r)))return false;
+ const salt=teamSide(side)==='host'?17:43;
+ const index=side==='host2'||side==='guest2'?2:0;
+ const d1=roll(turn*977+salt+index*271+step*97),d2=roll(turn*1877+salt+index*379+step*131);
+ ship.asteroidChecks=(ship.asteroidChecks||0)+1;
+ const hit=d1+d2<6;
+ events.push(side.toUpperCase()+' ASTEROID HEX '+ship.q+','+ship.r+': 2D6 '+d1+'+'+d2+'='+(d1+d2)+' VS 6 '+(hit?'COLLISION':'CLEAR'));
+ if(hit){
+  ship.asteroidImpacts=(ship.asteroidImpacts||0)+1;
+  damageShip(ship,'collision',turn+step*19+index*43,side,events,Math.max(1,Math.min(5,speed)));
+ }
+ return hit;
+}
+function missileBlast(out,rocks,target,hits,events,source){
+ const rockHit=rocks.has(rockKey(target.q,target.r));
+ for(const [slot,ship] of Object.entries(out.ships)){
+  if(ship.dead)continue;
+  if((rockHit&&ship.q===target.q&&ship.r===target.r)||(!rockHit&&distance(ship,target)<=1)){
+   hits[slot].push('missile');
+   events.push(source.toUpperCase()+' MISSILE BLAST → '+slot.toUpperCase()+' AT '+ship.q+','+ship.r);
+  }
+ }
+ if(rockHit){
+  out.asteroids=(out.asteroids||[]).filter(p=>p[0]!==target.q||p[1]!==target.r);
+  rocks.delete(rockKey(target.q,target.r));
+  events.push('ASTEROID DESTROYED BY PHOTON MISSILE AT '+target.q+','+target.r);
+ }
+}
 function firingBlocked(a,b,rocks){return blocked(a,b,rocks)||(rocks.has(rockKey(a.q,a.r))&&rocks.has(rockKey(b.q,b.r)))}
 const initial=(asteroids=false)=>({asteroids:asteroids?asteroidHexes:[],turn:1,ships:{host:{q:2,r:6,d:0,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false},guest:{q:16,r:6,d:3,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false}},submitted:{host:false,guest:false},phase:'orders',log:['Skirmish initiated. Both pilots must submit orders.'],winner:null});
 
@@ -137,9 +167,8 @@ function applyDoubles(s,orders){
    if(steps[i]==='R')ship.d=(ship.d+1)%6;
    if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(label+' LEFT STARFIELD · LOST');break}
    if(rocks.has(rockKey(ship.q,ship.r))){
-    const a=roll(s.turn*977+battleSlots.indexOf(slot)*43+i*97),b=roll(s.turn*1877+battleSlots.indexOf(slot)*53+i*131);
-    events.push(label+' ASTEROID CHECK '+a+'+'+b+' '+(a+b<6?'COLLISION':'CLEAR'));
-    if(a+b<6){damageShip(ship,'collision',s.turn*97+i*19,slot,events,Math.max(1,steps.length));if(ship.dead)break}
+    asteroidCollision(ship,rocks,s.turn,slot,i,steps.length,events);
+    if(ship.dead)break;
    }
   }
   events.push(label+' VECTOR '+(steps.join('')||'HOLD')+' · HEX '+ship.q+','+ship.r);
@@ -175,13 +204,7 @@ function applyDoubles(s,orders){
     shots.push({side:slot,kind,hit,from:{q:ship.q,r:ship.r},to:{q:enemy.q,r:enemy.r}});
     events.push(label+' '+kind.toUpperCase()+' → '+targetSlot.toUpperCase()+' 2D6 '+d1+'+'+d2+' VS '+threshold+' '+(hit?'HIT':'MISS'));
     if(hit){
-     if(kind==='missile'){
-      const asteroid=rocks.has(rockKey(enemy.q,enemy.r));
-      for(const victim of battleSlots){
-       const sh=out.ships[victim];if(!sh.dead&&((asteroid&&sh.q===enemy.q&&sh.r===enemy.r)||(!asteroid&&distance(sh,enemy)<=1)))hits[victim].push('missile');
-      }
-      if(asteroid){out.asteroids=(out.asteroids||[]).filter(p=>p[0]!==enemy.q||p[1]!==enemy.r);rocks.delete(rockKey(enemy.q,enemy.r))}
-     }else hits[targetSlot].push(kind);
+     if(kind==='missile')missileBlast(out,rocks,enemy,hits,events,slot);else hits[targetSlot].push(kind);
     }
     if(kind==='missile')ship.missiles--;
    }
@@ -229,9 +252,8 @@ function apply(s,orders){
    if(steps[i]==='R')ship.d=(ship.d+1)%6;
    if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(label+' LEFT STARFIELD · LOST');break}
    if(!rocks.has(rockKey(ship.q,ship.r)))continue;
-   const salt=teamSide(side)==='host'?17:43,d1=roll(s.turn*977+salt+i*97),d2=roll(s.turn*1877+salt+i*131);
-   events.push(label+' ASTEROID HEX '+ship.q+','+ship.r+': 2D6 '+d1+'+'+d2+'='+ (d1+d2)+' VS 6 '+(d1+d2<6?'COLLISION':'CLEAR'));
-   if(d1+d2<6){damageShip(ship,'collision',s.turn+i*19,side,events,Math.max(1,Math.min(5,steps.length)));if(ship.dead)break}
+   asteroidCollision(ship,rocks,s.turn,side,i,steps.length,events);
+   if(ship.dead)break;
   }
   events.push(label+' VECTOR '+(steps.join('')||'HOLD')+' · HEX '+ship.q+','+ship.r+' · FACING '+ship.d);
  }
@@ -265,18 +287,7 @@ function apply(s,orders){
     const [d1,d2]=dice(s.turn,side,kind,shotIndex++),target=weaponData[kind].base+Math.max(1,range)-1+Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)))+(enemy.lastMove===0?-1:0)+(rocks.has(rockKey(ship.q,ship.r))?1:0)+(rocks.has(rockKey(enemy.q,enemy.r))?1:0),hit=d1+d2>=target;
     shots.push({side,kind,hit,from:{q:ship.q,r:ship.r},to:{q:enemy.q,r:enemy.r}});
     if(hit){
-     if(kind==='missile'){
-      const blastRock=rocks.has(rockKey(enemy.q,enemy.r));
-      for(const victimSide of ['host','guest']){
-       const victim=out.ships[victimSide];
-       if(victim.dead)continue;
-       if((blastRock&&victim.q===enemy.q&&victim.r===enemy.r)||(!blastRock&&distance(victim,enemy)<=1)){
-        hits[victimSide].push('missile');
-        events.push(label+' MISSILE BLAST → '+(victimSide==='host'?'STAR LEAGUE':'KO-DAN')+' AT '+victim.q+','+victim.r);
-       }
-      }
-      if(blastRock){out.asteroids=(out.asteroids||[]).filter(p=>p[0]!==enemy.q||p[1]!==enemy.r);events.push('ASTEROID DESTROYED BY PHOTON MISSILE AT '+enemy.q+','+enemy.r)}
-     }else hits[enemySide].push(kind);
+     if(kind==='missile')missileBlast(out,firingRocks,enemy,hits,events,side);else hits[enemySide].push(kind);
     }
     events.push(label+' '+kind.toUpperCase()+' '+(i+1)+' 2D6 '+d1+'+'+d2+'='+ (d1+d2)+' VS '+target+': '+(hit?'HIT':'MISS'));
     if(kind==='missile'){ship.missiles--;events.push(label+' PHOTON MISSILE EXPENDED · '+ship.missiles+' REMAINING')}
@@ -364,7 +375,7 @@ let visualEffects=null;function draw(positions=null){const c=$('map'),ctx=c.getC
   }
   hexPaint(projected.q,projected.r,'rgba(25,79,77,.36)','#6bf9db',2);
  }
- for(const [q,r] of (state.asteroids||[])){const [x,y]=point(q,r);ctx.save();ctx.translate(x,y);ctx.beginPath();ctx.moveTo(-16,-9);ctx.lineTo(-7,-19);ctx.lineTo(11,-15);ctx.lineTo(20,-1);ctx.lineTo(10,16);ctx.lineTo(-12,14);ctx.closePath();ctx.fillStyle='#61472f';ctx.strokeStyle='#ffc65b';ctx.lineWidth=1.7;ctx.shadowColor='#d5964c';ctx.shadowBlur=9;ctx.fill();ctx.stroke();ctx.restore()}for(const side of activeSlots(state)){if(side==='guest'&&isSwarm(state))continue;const sh=state.ships[side];if(sh.dead)continue;const pos=positions?.[side]||sh,[x,y]=point(pos.q,pos.r);const color=teamSide(side)==='host'?'#52f5ff':'#ff667d';ctx.save();ctx.translate(x,y);ctx.rotate((pos.d??(teamSide(side)==='host'?0:3))*Math.PI/3);ctx.shadowColor=color;ctx.shadowBlur=13;ctx.beginPath();ctx.moveTo(R*.68,0);ctx.lineTo(-R*.43,-R*.43);ctx.lineTo(-R*.22,0);ctx.lineTo(-R*.43,R*.43);ctx.closePath();ctx.fillStyle=teamSide(side)==='host'?'#1a768c':'#922b4c';ctx.fill();ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.stroke();ctx.restore();ctx.fillStyle=color;ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.fillText(teamSide(side)==='host'?'GS-01':'DF-01',x,y-R*.78);ctx.font='11px monospace';ctx.fillText(`${sh.hp}/20`,x,y+R*.95);ctx.textAlign='left'}if(isSwarm(state)){for(const [id,sh] of Object.entries(state.fleet||{})){if(sh.dead)continue;const pos=positions?.[id]||sh,[x,y]=point(pos.q,pos.r);ctx.save();ctx.translate(x,y);ctx.rotate((pos.d||0)*Math.PI/3);ctx.beginPath();ctx.moveTo(15,0);ctx.lineTo(-11,-9);ctx.lineTo(-7,0);ctx.lineTo(-11,9);ctx.closePath();ctx.fillStyle='#922b4c';ctx.strokeStyle='#ff667d';ctx.lineWidth=1.5;ctx.fill();ctx.stroke();ctx.restore();ctx.fillStyle='#ff9aaa';ctx.font='10px monospace';ctx.textAlign='center';ctx.fillText(id,x,y-18);ctx.textAlign='left'}}if(visualEffects){const {shots,progress}=visualEffects;const shotCount=shots.length;const P=point;for(const [shotIndex,shot] of shots.entries()){const shotProgress=Math.min(1,Math.max(0,progress*shotCount-shotIndex));if(shotProgress<=0||shotProgress>=1)continue;const [ax,ay]=P(shot.from.q,shot.from.r),[bx,by]=P(shot.to.q,shot.to.r),dx=bx-ax,dy=by-ay,dist=Math.hypot(dx,dy)||1,nx=-dy/dist,ny=dx/dist,offset=shot.hit?0:Math.min(32,dist*.16),tx=bx+nx*offset,ty=by+ny*offset,color=shot.kind==='laser'?'#55f7ff':shot.kind==='particle'?'#ffc65b':'#ff5c77';ctx.save();ctx.strokeStyle=color;ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=22;if(shot.kind==='missile'){const t=Math.min(1,Math.max(0,(shotProgress-.05)/.75));const x=ax+(tx-ax)*t,y=ay+(ty-ay)*t;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(x,y);ctx.stroke();ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fill()}else if(shotProgress<.78){ctx.globalAlpha=shot.kind==='laser'?(Math.sin(shotProgress*70)>-.3?1:.25):.85;ctx.lineWidth=shot.kind==='particle'?6:3;ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(tx,ty);ctx.stroke()}if(shot.hit&&shotProgress>.72){ctx.globalAlpha=Math.max(0,1-(shotProgress-.72)/.28);ctx.beginPath();ctx.arc(bx,by,7+(shotProgress-.72)*65,0,Math.PI*2);ctx.strokeStyle='#fff1b6';ctx.lineWidth=3;ctx.stroke()}ctx.restore()}} }
+ for(const [q,r] of (state.asteroids||[])){const [x,y]=point(q,r);ctx.save();ctx.translate(x,y);ctx.beginPath();ctx.moveTo(-16,-9);ctx.lineTo(-7,-19);ctx.lineTo(11,-15);ctx.lineTo(20,-1);ctx.lineTo(10,16);ctx.lineTo(-12,14);ctx.closePath();ctx.fillStyle='#61472f';ctx.strokeStyle='#ffc65b';ctx.lineWidth=1.7;ctx.shadowColor='#d5964c';ctx.shadowBlur=9;ctx.fill();ctx.stroke();ctx.restore()}for(const side of activeSlots(state)){if(side==='guest'&&isSwarm(state))continue;const sh=state.ships[side];if(sh.dead)continue;const pos=positions?.[side]||sh,[x,y]=point(pos.q,pos.r);const color=teamSide(side)==='host'?'#52f5ff':'#ff667d';ctx.save();ctx.translate(x,y);ctx.rotate((pos.d??(teamSide(side)==='host'?0:3))*Math.PI/3);ctx.shadowColor=color;ctx.shadowBlur=13;ctx.beginPath();ctx.moveTo(R*.68,0);ctx.lineTo(-R*.43,-R*.43);ctx.lineTo(-R*.22,0);ctx.lineTo(-R*.43,R*.43);ctx.closePath();ctx.fillStyle=teamSide(side)==='host'?'#1a768c':'#922b4c';ctx.fill();ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.stroke();ctx.restore();ctx.fillStyle=color;ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.fillText(side==='host'?'GS-01':side==='host2'?'GS-02':side==='guest2'?'DF-02':'DF-01',x,y-R*.78);ctx.font='11px monospace';ctx.fillText(`${sh.hp}/20`,x,y+R*.95);ctx.textAlign='left'}if(isSwarm(state)){for(const [id,sh] of Object.entries(state.fleet||{})){if(sh.dead)continue;const pos=positions?.[id]||sh,[x,y]=point(pos.q,pos.r);ctx.save();ctx.translate(x,y);ctx.rotate((pos.d||0)*Math.PI/3);ctx.beginPath();ctx.moveTo(15,0);ctx.lineTo(-11,-9);ctx.lineTo(-7,0);ctx.lineTo(-11,9);ctx.closePath();ctx.fillStyle='#922b4c';ctx.strokeStyle='#ff667d';ctx.lineWidth=1.5;ctx.fill();ctx.stroke();ctx.restore();ctx.fillStyle='#ff9aaa';ctx.font='10px monospace';ctx.textAlign='center';ctx.fillText(id,x,y-18);ctx.textAlign='left'}}if(visualEffects){const {shots,progress}=visualEffects;const shotCount=shots.length;const P=point;for(const [shotIndex,shot] of shots.entries()){const shotProgress=Math.min(1,Math.max(0,progress*shotCount-shotIndex));if(shotProgress<=0||shotProgress>=1)continue;const [ax,ay]=P(shot.from.q,shot.from.r),[bx,by]=P(shot.to.q,shot.to.r),dx=bx-ax,dy=by-ay,dist=Math.hypot(dx,dy)||1,nx=-dy/dist,ny=dx/dist,offset=shot.hit?0:Math.min(32,dist*.16),tx=bx+nx*offset,ty=by+ny*offset,color=shot.kind==='laser'?'#55f7ff':shot.kind==='particle'?'#ffc65b':'#ff5c77';ctx.save();ctx.strokeStyle=color;ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=22;if(shot.kind==='missile'){const t=Math.min(1,Math.max(0,(shotProgress-.05)/.75));const x=ax+(tx-ax)*t,y=ay+(ty-ay)*t;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(x,y);ctx.stroke();ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fill()}else if(shotProgress<.78){ctx.globalAlpha=shot.kind==='laser'?(Math.sin(shotProgress*70)>-.3?1:.25):.85;ctx.lineWidth=shot.kind==='particle'?6:3;ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(tx,ty);ctx.stroke()}if(shot.hit&&shotProgress>.72){ctx.globalAlpha=Math.max(0,1-(shotProgress-.72)/.28);ctx.beginPath();ctx.arc(bx,by,7+(shotProgress-.72)*65,0,Math.PI*2);ctx.strokeStyle='#fff1b6';ctx.lineWidth=3;ctx.stroke()}ctx.restore()}} }
 function animateTurn(before,after){
  if(animation)cancelAnimationFrame(animation);
  visualEffects=null;
