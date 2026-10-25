@@ -5,17 +5,19 @@ service cloud.firestore {
       function signedIn() { return request.auth != null; }
       function member() { return signedIn() && (resource.data.hostUid == request.auth.uid || resource.data.guestUid == request.auth.uid || resource.data.host2Uid == request.auth.uid || resource.data.guest2Uid == request.auth.uid); }
       allow create: if signedIn() && roomId.matches('[A-HJ-NP-Z2-9]{8}')
-        && request.resource.data.keys().hasOnly(['hostUid','guestUid','host2Uid','guest2Uid','hostReady','guestReady','host2Ready','guest2Ready','createdAt','scenario','asteroids'])
+        && request.resource.data.keys().hasOnly(['hostUid','guestUid','host2Uid','guest2Uid','hostReady','guestReady','host2Ready','guest2Ready','createdAt','scenario','asteroids','seed'])
         && request.resource.data.hostUid == request.auth.uid && request.resource.data.guestUid == null && request.resource.data.host2Uid == null && request.resource.data.guest2Uid == null && request.resource.data.host2Ready == false && request.resource.data.guest2Ready == false
         && request.resource.data.hostReady == false && request.resource.data.guestReady == false
-        && request.resource.data.scenario == 'duel' && request.resource.data.asteroids == false;
+        && request.resource.data.scenario == 'duel' && request.resource.data.asteroids == false
+        && request.resource.data.seed is int && request.resource.data.seed >= 1 && request.resource.data.seed <= 4294967295;
       allow get: if signedIn();
       allow list: if false;
       allow update: if signedIn() && (
         (resource.data.hostUid == request.auth.uid
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['scenario','asteroids','hostReady','guestReady','host2Ready','guest2Ready'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['scenario','asteroids','seed','hostReady','guestReady','host2Ready','guest2Ready'])
           && request.resource.data.scenario in ['duel','swarm']
           && request.resource.data.asteroids is bool
+          && request.resource.data.seed is int && request.resource.data.seed >= 1 && request.resource.data.seed <= 4294967295
           && request.resource.data.hostReady == false && request.resource.data.guestReady == false
           && request.resource.data.host2Ready == false && request.resource.data.guest2Ready == false)
         || (resource.data.hostUid == request.auth.uid
