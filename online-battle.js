@@ -88,6 +88,7 @@ function apply(s,orders){
   events.push(label+' VECTOR '+(steps.join('')||'HOLD')+' · HEX '+ship.q+','+ship.r+' · FACING '+ship.d);
  }
  // All volleys use post-movement positions, with damage applied only after both sides fire.
+ const firingRocks=rocksFor(out);
  const hits={host:[],guest:[]},shots=[],weaponData={laser:{range:10,base:3},particle:{range:9,base:4},missile:{range:8,base:5}};
  function dice(turn,side,kind,index){let x=(turn*2654435761+(side==='host'?101:307)+kind.split('').reduce((a,c)=>a+c.charCodeAt(0),0)+index*7331)>>>0;x^=x<<13;x^=x>>>17;x^=x<<5;return [1+(x>>>0)%6,1+((x>>>9)%6)]}
  function arcAllows(ship,enemy,arc){const relative=(facingToTarget(ship,enemy)-ship.d+6)%6;return ({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[arc]?.includes(relative)===true}
@@ -110,7 +111,7 @@ function apply(s,orders){
    const n=kind==='laser'?Math.max(0,(side==='host'?2:3)-(ship.laserLoss||0)):1;
    for(let i=0;i<n;i++){
     const arc=kind!=='laser'?0:side==='host'?Number(o.arc??0):i===2?3:0;
-    const range=distance(ship,enemy),rocks=rocksFor(out);
+    const range=distance(ship,enemy),rocks=firingRocks;
     if(firingBlocked(ship,enemy,rocks)){events.push(label+' '+kind.toUpperCase()+' '+(i+1)+': ASTEROID BLOCKS LINE OF SIGHT');continue}
     if(range>weaponData[kind].range||!arcAllows(ship,enemy,arc)){events.push(label+' '+kind.toUpperCase()+' '+(i+1)+': NO FIRING SOLUTION ('+range+' HEXES / ARC)');continue}
     const [d1,d2]=dice(s.turn,side,kind,shotIndex++),target=weaponData[kind].base+Math.max(1,range)-1+Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)))+(enemy.lastMove===0?-1:0)+(rocks.has(rockKey(ship.q,ship.r))?1:0)+(rocks.has(rockKey(enemy.q,enemy.r))?1:0),hit=d1+d2>=target;
@@ -134,7 +135,11 @@ function apply(s,orders){
    }
   }
  }
- for(const side of ['host','guest'])for(let i=0;i<hits[side].length;i++)damageShip(out.ships[side],hits[side][i],s.turn+i*17,side,events);
+ for(const side of ['host','guest'])for(let i=0;i<hits[side].length;i++){
+  // Separate each hit's damage dice, including simultaneous missile splash.
+  const hitSeed=s.turn*10000+(side==='host'?1000:5000)+i*37+1;
+  damageShip(out.ships[side],hits[side][i],hitSeed,side,events);
+ }
  for(const side of ['host','guest']){const ship=out.ships[side],o=orders[side];recoverCrewOnline(ship,'pilot',s.turn,side,events);if(side==='host')recoverCrewOnline(ship,'gunner',s.turn,side,events);if(ship.life){ship.life--;events.push((side==='host'?'STAR LEAGUE':'KO-DAN')+' LIFE SUPPORT '+ship.life+' TURNS REMAIN');if(ship.life===0){ship.pilot=6;ship.killedSpeed=ship.lastMove??0}}if(ship.nextStabilizer){ship.stabilizer=1;ship.nextStabilizer=0;ship.restrict=null;ship.nextRestrict=0;events.push(side.toUpperCase()+' STABILIZER DAMAGE OVERRIDES STEERING RESTRICTION')}else{ship.stabilizer=0;if(ship.nextRestrict){const choices=['lockL','lockF','lockR','noL','noR'];ship.restrict=choices[(roll(s.turn*333+(side==='host'?11:37))-1)%choices.length];ship.nextRestrict=0}else ship.restrict=null}
 if(ship.nextConstant&&ship.nextHalf){ship.deferredConstant=true;ship.deferredSpeedTarget=ship.lastMove??0;ship.deferredSpeedTurns=2;ship.constant=null;ship.nextConstant=0;events.push(side.toUpperCase()+' SPEED CONFLICT: HALF SPEED FOR TWO TURNS BEFORE CONSTANT SPEED')}
 else if(ship.nextConstant){ship.constant=ship.lastMove??0;ship.nextConstant=0}else ship.constant=null;
