@@ -1,5 +1,5 @@
 export const firebaseConfig = {
-  apiKey: "AIzaSyBazznDBoAsVP0cD6SI3PDzdNCyomc2CzE",
+  apiKey: "AIzaSyBazznDBoAsVPOcD6SI3PDzdNCyomc2CzE",
   authDomain: "starfighter-online.firebaseapp.com",
   projectId: "starfighter-online",
   storageBucket: "starfighter-online.firebasestorage.app",
