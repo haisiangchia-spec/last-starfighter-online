@@ -5,19 +5,47 @@ import {firebaseConfig} from './firebase-config.js';
 const $=id=>document.getElementById(id),room=(new URLSearchParams(location.hash.slice(1))).get('room')?.toUpperCase();
 const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
 let uid,role,state,unsubscribe,locked=false;
-const moves={hold:[0,0],n:[0,-1],ne:[1,-1],se:[1,0],s:[0,1],sw:[-1,1],nw:[-1,0]};
-const initial=()=>({turn:1,ships:{host:{q:1,r:4,hp:6},guest:{q:7,r:4,hp:6}},submitted:{host:false,guest:false},phase:'orders',log:['Skirmish initiated. Both pilots must submit orders.'],winner:null});
+// Axial hex facings clockwise, matching the existing local game's directional convention.
+const dirs=[[1,0],[0,1],[-1,1],[-1,0],[0,-1],[1,-1]];
+const moves=['hold','F','L','R'];
+function facingToTarget(a,b){const dq=b.q-a.q,dr=b.r-a.r;let best=0,score=-Infinity;for(let i=0;i<6;i++){const [x,y]=dirs[i],v=(2*x+y)*dq+(x+2*y)*dr;if(v>score){score=v;best=i}}return best}
+function inArc(a,b){const t=facingToTarget(a,b);return ((t-a.d+6)%6)<=1||((a.d-t+6)%6)<=1}
+
+const initial=()=>({turn:1,ships:{host:{q:1,r:4,d:0,hp:6},guest:{q:7,r:4,d:3,hp:6}},submitted:{host:false,guest:false},phase:'orders',log:['Skirmish initiated. Both pilots must submit orders.'],winner:null});
 const battleRef=()=>doc(db,'rooms',room,'combat','state');
 const orderRef=(turn,side)=>doc(db,'rooms',room,'combatOrders',`${turn}_${side}`);
 function note(msg){$('status').textContent=msg}
 function distance(a,b){return(Math.abs(a.q-b.q)+Math.abs(a.r-b.r)+Math.abs((a.q+a.r)-(b.q+b.r)))/2}
-function apply(s,orders){const out=structuredClone(s),a=out.ships.host,b=out.ships.guest;const events=[`TURN ${s.turn}`];for(const side of ['host','guest']){const ship=out.ships[side],o=orders[side],d=moves[o.move]||moves.hold;ship.q=Math.max(0,Math.min(8,ship.q+d[0]));ship.r=Math.max(0,Math.min(8,ship.r+d[1]));events.push(`${side==='host'?'STAR LEAGUE':'KO-DAN'} ${o.move.toUpperCase()}`)}
-const range=distance(a,b);for(const side of ['host','guest']){const o=orders[side],enemy=out.ships[side==='host'?'guest':'host'];if(o.fire==='fire'&&range<=3){const targetGuard=orders[side==='host'?'guest':'host'].fire==='guard';const damage=targetGuard?0:1;enemy.hp=Math.max(0,enemy.hp-damage);events.push(`${side==='host'?'STAR LEAGUE':'KO-DAN'} FIRES: ${damage} HULL DAMAGE${targetGuard?' (SHIELDS ABSORB)':''}`)}else events.push(`${side==='host'?'STAR LEAGUE':'KO-DAN'} ${o.fire==='guard'?'GUARDS':'OUT OF RANGE'}`)}
-out.winner=a.hp===0&&b.hp===0?'DRAW':a.hp===0?'KO-DAN':b.hp===0?'STAR LEAGUE':null;out.turn++;out.phase=out.winner?'finished':'orders';out.submitted={host:false,guest:false};out.log=[...events,...s.log].slice(0,90);if(out.winner)out.log.unshift(`BATTLE OVER: ${out.winner}`);return out}
-function draw(){const c=$('map'),ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);const R=28,OX=100,OY=48;const point=(q,r)=>[OX+R*Math.sqrt(3)*(q+r/2),OY+R*1.5*r];for(let q=0;q<9;q++)for(let r=0;r<9;r++){const [x,y]=point(q,r);ctx.beginPath();for(let i=0;i<6;i++){const a=Math.PI/180*(60*i-30),px=x+R*Math.cos(a),py=y+R*Math.sin(a);i?ctx.lineTo(px,py):ctx.moveTo(px,py)}ctx.closePath();ctx.strokeStyle='#1e4d63';ctx.stroke()}if(!state)return;for(const side of ['host','guest']){const sh=state.ships[side],[x,y]=point(sh.q,sh.r);ctx.beginPath();ctx.arc(x,y,14,0,Math.PI*2);ctx.fillStyle=side==='host'?'#55f7ff':'#ff657b';ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=18;ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='#e8ffff';ctx.font='bold 13px monospace';ctx.fillText(`${side==='host'?'SL':'KD'} ${sh.hp}/6`,x-24,y-23)} }
+function apply(s,orders){
+ const out=structuredClone(s),events=[`TURN ${s.turn}`];
+ for(const side of ['host','guest']){
+  const ship=out.ships[side],o=orders[side],cmd=o.move;
+  if(cmd==='L')ship.d=(ship.d+5)%6;
+  if(cmd==='R')ship.d=(ship.d+1)%6;
+  if(cmd==='F'){const [dq,dr]=dirs[ship.d];ship.q=Math.max(0,Math.min(8,ship.q+dq));ship.r=Math.max(0,Math.min(8,ship.r+dr))}
+  events.push(`${side==='host'?'STAR LEAGUE':'KO-DAN'} ${cmd==='F'?'ADVANCES':cmd==='L'?'TURNS PORT':cmd==='R'?'TURNS STARBOARD':'HOLDS'} · FACING ${ship.d}`);
+ }
+ // Both shots evaluate against the same post-movement positions, before applying damage.
+ const hits={host:0,guest:0};
+ for(const side of ['host','guest']){
+  const ship=out.ships[side],enemySide=side==='host'?'guest':'host',enemy=out.ships[enemySide],o=orders[side],range=distance(ship,enemy);
+  if(o.fire!=='fire'){events.push(`${side==='host'?'STAR LEAGUE':'KO-DAN'} DIVERTS POWER TO DEFENCE`);continue}
+  if(range>4||!inArc(ship,enemy)){events.push(`${side==='host'?'STAR LEAGUE':'KO-DAN'}: NO FIRING SOLUTION (${range} HEXES / ARC)`);continue}
+  const raw=range<=2?2:1,guard=orders[enemySide].fire==='guard'?1:0,dmg=Math.max(0,raw-guard);
+  hits[enemySide]+=dmg;events.push(`${side==='host'?'STAR LEAGUE':'KO-DAN'} FIRES AT RANGE ${range}: ${dmg} HULL DAMAGE`);
+ }
+ for(const side of ['host','guest'])out.ships[side].hp=Math.max(0,out.ships[side].hp-hits[side]);
+ const a=out.ships.host,b=out.ships.guest;
+ out.winner=a.hp===0&&b.hp===0?'DRAW':a.hp===0?'KO-DAN':b.hp===0?'STAR LEAGUE':null;
+ out.turn++;out.phase=out.winner?'finished':'orders';out.submitted={host:false,guest:false};
+ out.log=[...events,...s.log].slice(0,90);if(out.winner)out.log.unshift(`BATTLE OVER: ${out.winner}`);
+ return out;
+}
+function draw(){const c=$('map'),ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);const R=28,OX=100,OY=48;const point=(q,r)=>[OX+R*Math.sqrt(3)*(q+r/2),OY+R*1.5*r];for(let q=0;q<9;q++)for(let r=0;r<9;r++){const [x,y]=point(q,r);ctx.beginPath();for(let i=0;i<6;i++){const a=Math.PI/180*(60*i-30),px=x+R*Math.cos(a),py=y+R*Math.sin(a);i?ctx.lineTo(px,py):ctx.moveTo(px,py)}ctx.closePath();ctx.strokeStyle='#1e4d63';ctx.stroke()}if(!state)return;for(const side of ['host','guest']){const sh=state.ships[side],[x,y]=point(sh.q,sh.r);ctx.beginPath();ctx.arc(x,y,14,0,Math.PI*2);ctx.fillStyle=side==='host'?'#55f7ff':'#ff657b';ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=18;ctx.fill();ctx.shadowBlur=0;const [dx,dy]=dirs[sh.d??(side==='host'?0:3)];ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+dx*25+dy*12,y+dy*20);ctx.strokeStyle='#ffffff';ctx.lineWidth=3;ctx.stroke();ctx.lineWidth=1;ctx.fillStyle='#e8ffff';ctx.font='bold 13px monospace';ctx.fillText(`${side==='host'?'SL':'KD'} ${sh.hp}/6`,x-24,y-23)} }
 async function initialize(){if(!room||!/^[A-HJ-NP-Z2-9]{8}$/.test(room)){note('Missing room code. Create or join a room in the lobby first.');return}const rs=await getDoc(doc(db,'rooms',room));if(!rs.exists()){note('Room not found.');return}const r=rs.data();role=uid===r.hostUid?'host':uid===r.guestUid?'guest':null;if(!role){note('You are not a member of this room.');return}$('identity').textContent=`ROOM ${room} // ${role==='host'?'STAR LEAGUE':'KO-DAN'}`;if(role==='host')await runTransaction(db,async t=>{const s=await t.get(battleRef());if(!s.exists())t.set(battleRef(),initial())});unsubscribe=onSnapshot(battleRef(),snap=>{if(!snap.exists()){note('Waiting for host to initialize skirmish...');return}state=snap.data();render()},e=>note(`SYNC ERROR: ${e.message}`))}
-function render(){if(!state)return;$('turn').textContent=state.turn;$('hull').textContent=`${state.ships[role].hp}/6`;$('log').textContent=state.log.join('\n');const both=state.submitted.host&&state.submitted.guest;note(state.winner?`BATTLE COMPLETE: ${state.winner}`:both?'BOTH ORDERS SUBMITTED — reveal and resolve the turn.':state.submitted[role]?'ORDERS SEALED — waiting for opponent.':`AWAITING ORDERS — ${state.submitted[role==='host'?'guest':'host']?'opponent has submitted':'both pilots preparing'}`);$('submit').disabled=locked||!!state.winner||state.submitted[role];$('resolve').disabled=locked||!!state.winner||!both;$('reset').disabled=locked||role!=='host';draw()}
+let lastTurn=0;function render(){if(!state)return;if(lastTurn&&state.turn!==lastTurn){$('map').style.filter='brightness(2)';setTimeout(()=>$('map').style.filter='',350)}lastTurn=state.turn;$('turn').textContent=state.turn;$('hull').textContent=`${state.ships[role].hp}/6`;$('log').textContent=state.log.join('\n');const both=state.submitted.host&&state.submitted.guest;if(both&&!locked&&!state.winner)queueMicrotask(()=>resolveTurn());note(state.winner?`BATTLE COMPLETE: ${state.winner}`:both?'BOTH ORDERS SUBMITTED — reveal and resolve the turn.':state.submitted[role]?'ORDERS SEALED — waiting for opponent.':`AWAITING ORDERS — ${state.submitted[role==='host'?'guest':'host']?'opponent has submitted':'both pilots preparing'}`);$('submit').disabled=locked||!!state.winner||state.submitted[role];$('resolve').disabled=locked||!!state.winner||!both;$('reset').disabled=locked||role!=='host';draw()}
 $('submit').onclick=async()=>{if(!state||locked||state.submitted[role])return;locked=true;render();try{const batch=writeBatch(db);batch.set(orderRef(state.turn,role),{owner:uid,turn:state.turn,move:$('move').value,fire:$('fire').value});batch.update(battleRef(),{[`submitted.${role}`]:true});await batch.commit()}catch(e){note(`ORDER ERROR: ${e.message}`)}finally{locked=false;render()}};
-$('resolve').onclick=async()=>{if(!state||locked)return;locked=true;render();try{const turn=state.turn;const [h,g]=await Promise.all([getDoc(orderRef(turn,'host')),getDoc(orderRef(turn,'guest'))]);if(!h.exists()||!g.exists())throw Error('Both order documents not yet visible.');const orders={host:h.data(),guest:g.data()};await runTransaction(db,async t=>{const snap=await t.get(battleRef());const s=snap.data();if(s.turn!==turn||!s.submitted.host||!s.submitted.guest)return;t.set(battleRef(),apply(s,orders))})}catch(e){note(`RESOLUTION ERROR: ${e.message}`)}finally{locked=false;render()}};
+async function resolveTurn(){if(!state||locked||!state.submitted.host||!state.submitted.guest)return;locked=true;render();try{const turn=state.turn;const [h,g]=await Promise.all([getDoc(orderRef(turn,'host')),getDoc(orderRef(turn,'guest'))]);if(!h.exists()||!g.exists())throw Error('Both order documents not yet visible.');const orders={host:h.data(),guest:g.data()};await runTransaction(db,async t=>{const snap=await t.get(battleRef());const s=snap.data();if(s.turn!==turn||!s.submitted.host||!s.submitted.guest)return;t.set(battleRef(),apply(s,orders))})}catch(e){note(`RESOLUTION ERROR: ${e.message}`)}finally{locked=false;render()}}
+$('resolve').onclick=resolveTurn;
 $('reset').onclick=async()=>{if(role!=='host'||!confirm('Start a new skirmish for both players?'))return;try{await setDoc(battleRef(),initial())}catch(e){note(`RESET ERROR: ${e.message}`)}};
 onAuthStateChanged(auth,async u=>{if(!u){try{await signInAnonymously(auth)}catch(e){note(`AUTH ERROR: ${e.message}`)}return}uid=u.uid;try{await initialize()}catch(e){note(`INIT ERROR: ${e.message}`)}});
