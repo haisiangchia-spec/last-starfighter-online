@@ -12,7 +12,7 @@ assert.ok(start>=0&&end>start,'Combat engine source boundaries changed');
 const engine=source.slice(start,end);
 const sandbox={structuredClone,console};
 vm.createContext(sandbox);
-vm.runInContext(engine+'\nthis.combat={initial,apply,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget};',sandbox,{filename:'online-battle.js'});
+vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,apply,applyDoubles,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget};',sandbox,{filename:'online-battle.js'});
 const c=sandbox.combat;
 const orders=(host={plan:'',fire:'none'},guest={plan:'',fire:'none'})=>({host,guest});
 function scenario(){const s=c.initial(false);s.log=[];return s}
@@ -180,9 +180,9 @@ test('original combat log effect labels are retained',()=>{
 
 test('sealed orders show a clear opponent-specific waiting indicator',()=>{
  const render=source.slice(source.indexOf('function render()'),source.indexOf("$('submit').onclick"));
- assert.ok(render.includes('WAITING FOR ${otherName} TO SUBMIT ORDERS'));
+ assert.ok(render.includes('WAITING FOR ${doubles?pending.map(x=>x.toUpperCase()).join(\', \'):otherName} TO SUBMIT ORDERS'));
  assert.ok(render.includes('HAS LOCKED ORDERS · YOUR ORDERS STILL PENDING'));
- assert.ok(render.includes('BOTH PILOTS READY — resolving turn automatically.'));
+ assert.ok(render.includes('ALL PILOTS READY — resolving turn automatically.'));
  assert.ok(render.includes("state.submitted[role]"));
  assert.ok(render.includes("state.submitted[other]"));
 });
@@ -198,4 +198,43 @@ test('victory defeat and draw banner is driven by synchronized winner state',()=
  assert.match(source,/DEFEAT · /);
  assert.match(source,/BATTLE ENDED IN A DRAW/);
  assert.match(source,/function render\(\)\{if\(!state\|\|!role\)return;showBattleResult\(\)/);
+});
+
+test('2v2 initializes four independently positioned ships and sealed slots',()=>{
+ const s=c.initialDoubles(true);
+ assert.deepEqual(Object.keys(s.ships).sort(),['guest','guest2','host','host2']);
+ assert.deepEqual(Object.keys(s.submitted).sort(),['guest','guest2','host','host2']);
+ assert.notEqual(s.ships.host.r,s.ships.host2.r);
+ assert.notEqual(s.ships.guest.r,s.ships.guest2.r);
+ assert.ok(s.asteroids.length>0);
+});
+test('2v2 movement orders apply independently to all four ships',()=>{
+ const s=c.initialDoubles(false),o={};
+ for(const slot of Object.keys(s.ships))o[slot]={plan:'',fire:'none',target:''};
+ o.host2.plan='F';o.guest2.plan='F';
+ const next=c.apply(s,o);
+ assert.equal(next.ships.host.q,s.ships.host.q);
+ assert.equal(next.ships.host2.q,s.ships.host2.q+1);
+ assert.equal(next.ships.guest2.q,s.ships.guest2.q-1);
+ assert.equal(next.turn,2);
+ assert.deepEqual(Object.values(next.submitted),[false,false,false,false]);
+});
+test('2v2 winner requires elimination of both enemy fighters',()=>{
+ const s=c.initialDoubles(false),o={};
+ for(const slot of Object.keys(s.ships))o[slot]={plan:'',fire:'none',target:''};
+ s.ships.guest.dead=true;s.ships.guest2.dead=false;
+ assert.equal(c.apply(s,o).winner,null);
+ s.ships.guest2.dead=true;
+ assert.equal(c.apply(s,o).winner,'STAR LEAGUE');
+});
+test('2v2 combat uses explicit enemy target',()=>{
+ const s=c.initialDoubles(false),o={};
+ for(const slot of Object.keys(s.ships))o[slot]={plan:'',fire:'none',target:''};
+ s.ships.host.q=8;s.ships.host.r=4;s.ships.host.d=0;
+ s.ships.guest.q=9;s.ships.guest.r=4;
+ s.ships.guest2.q=9;s.ships.guest2.r=5;
+ o.host={plan:'',fire:'laser',arc:0,target:'guest2'};
+ let fired=false;
+ for(let turn=1;turn<=100;turn++){s.turn=turn;const next=c.apply(s,o);if(next.lastVolley.shots.some(x=>x.side==='host')){fired=true;assert.ok(next.log.some(x=>x.includes('HOST LASER → GUEST2')));break}}
+ assert.ok(fired);
 });
