@@ -43,7 +43,8 @@ service cloud.firestore {
            && request.resource.data.submitted[side() == 'host' ? 'guest' : 'host'] == resource.data.submitted[side() == 'host' ? 'guest' : 'host'])
           || (resource.data.submitted.host == true && resource.data.submitted.guest == true
               && request.resource.data.turn == resource.data.turn + 1)
-          || (host() && request.resource.data.turn == 1)
+          || (host() && request.resource.data.phase == 'ended' && resource.data.phase != 'ended' && request.resource.data.turn == resource.data.turn)
+          || (host() && resource.data.phase == 'ended' && request.resource.data.phase == 'orders' && request.resource.data.turn == 1)
         );
         allow delete: if false;
       }
