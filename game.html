@@ -12,7 +12,7 @@ if(scenario==='duel'){
 }else if(asteroids==='none'){
  ships.push(make('GS-01','gunstar','star',5,6,0));
  // Two touching seven-ship waves, separated by two hexes and heading away from the Gunstar.
- for(let i=0;i<14;i++){let wave=Math.floor(i/7),r=3+i%7;ships.push(make('SW-'+String(i+1).padStart(2,'0'),'swarm','kodan',10+2*wave,r,0))}
+ for(let i=0;i<14;i++){let wave=Math.floor(i/7),r=3+i%7;ships.push(make('SW-'+String(i+1).padStart(2,'0'),'swarm','kodan',10+2*wave,r,3))}
 }else{
  ships.push(make('GS-01','gunstar','star',0,6,0));
  for(let i=0;i<14;i++){let wave=Math.floor(i/7),r=3+i%7;ships.push(make('SW-'+String(i+1).padStart(2,'0'),'swarm','kodan',16+2*wave,r,3))}
