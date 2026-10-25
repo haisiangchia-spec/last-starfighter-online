@@ -19,6 +19,7 @@ function inArc(a,b){const t=facingToTarget(a,b);return ((t-a.d+6)%6)<=1||((a.d-t
 const asteroidHexes=[[6,3],[7,4],[8,7],[10,5],[12,8],[14,4]];const rockKey=(q,r)=>q+','+r;const rocksFor=s=>new Set((s?.asteroids||[]).map(p=>rockKey(p[0],p[1])));
 function hexLine(a,b){const n=distance(a,b),line=[];for(let i=1;i<n;i++){const t=i/n,x=a.q+(b.q-a.q)*t,z=a.r+(b.r-a.r)*t,y=-x-z;let q=Math.round(x),r=Math.round(z),cy=Math.round(y);const dx=Math.abs(q-x),dy=Math.abs(cy-y),dz=Math.abs(r-z);if(dx>dy&&dx>dz)q=-cy-r;else if(dy>dz)cy=-q-r;else r=-q-cy;line.push([q,r])}return line}
 function blocked(a,b,rocks){return hexLine(a,b).some(([q,r])=>rocks.has(rockKey(q,r)))}
+function firingBlocked(a,b,rocks){return blocked(a,b,rocks)||(rocks.has(rockKey(a.q,a.r))&&rocks.has(rockKey(b.q,b.r)))}
 const initial=(asteroids=false)=>({asteroids:asteroids?asteroidHexes:[],turn:1,ships:{host:{q:2,r:6,d:0,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false},guest:{q:16,r:6,d:3,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false}},submitted:{host:false,guest:false},phase:'orders',log:['Skirmish initiated. Both pilots must submit orders.'],winner:null});
 
 // Swarm mode keeps a single Gunstar under host control and fourteen individual
@@ -110,11 +111,24 @@ function apply(s,orders){
    for(let i=0;i<n;i++){
     const arc=kind!=='laser'?0:side==='host'?Number(o.arc??0):i===2?3:0;
     const range=distance(ship,enemy),rocks=rocksFor(out);
-    if(blocked(ship,enemy,rocks)){events.push(label+' '+kind.toUpperCase()+' '+(i+1)+': ASTEROID BLOCKS LINE OF SIGHT');continue}
+    if(firingBlocked(ship,enemy,rocks)){events.push(label+' '+kind.toUpperCase()+' '+(i+1)+': ASTEROID BLOCKS LINE OF SIGHT');continue}
     if(range>weaponData[kind].range||!arcAllows(ship,enemy,arc)){events.push(label+' '+kind.toUpperCase()+' '+(i+1)+': NO FIRING SOLUTION ('+range+' HEXES / ARC)');continue}
     const [d1,d2]=dice(s.turn,side,kind,shotIndex++),target=weaponData[kind].base+Math.max(1,range)-1+Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)))+(enemy.lastMove===0?-1:0)+(rocks.has(rockKey(ship.q,ship.r))?1:0)+(rocks.has(rockKey(enemy.q,enemy.r))?1:0),hit=d1+d2>=target;
     shots.push({side,kind,hit,from:{q:ship.q,r:ship.r},to:{q:enemy.q,r:enemy.r}});
-    if(hit)hits[enemySide].push(kind);
+    if(hit){
+     if(kind==='missile'){
+      const blastRock=rocks.has(rockKey(enemy.q,enemy.r));
+      for(const victimSide of ['host','guest']){
+       const victim=out.ships[victimSide];
+       if(victim.dead)continue;
+       if((blastRock&&victim.q===enemy.q&&victim.r===enemy.r)||(!blastRock&&distance(victim,enemy)<=1)){
+        hits[victimSide].push('missile');
+        events.push(label+' MISSILE BLAST → '+(victimSide==='host'?'STAR LEAGUE':'KO-DAN')+' AT '+victim.q+','+victim.r);
+       }
+      }
+      if(blastRock){out.asteroids=(out.asteroids||[]).filter(p=>p[0]!==enemy.q||p[1]!==enemy.r);events.push('ASTEROID DESTROYED BY PHOTON MISSILE AT '+enemy.q+','+enemy.r)}
+     }else hits[enemySide].push(kind);
+    }
     events.push(label+' '+kind.toUpperCase()+' '+(i+1)+' 2D6 '+d1+'+'+d2+'='+ (d1+d2)+' VS '+target+': '+(hit?'HIT':'MISS'));
     if(kind==='missile'){ship.missiles--;events.push(label+' PHOTON MISSILE EXPENDED · '+ship.missiles+' REMAINING')}
    }
