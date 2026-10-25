@@ -13,7 +13,7 @@ const slotUid=(r,slot)=>r[slot==='host'?'hostUid':slot==='guest'?'guestUid':slot
 const slotReady=(r,slot)=>!!r[slot==='host'?'hostReady':slot==='guest'?'guestReady':slot+'Ready'];
 const sideOf=slot=>slot.startsWith('host')?'STAR LEAGUE':'KO-DAN';
 const team=(r,side)=>slots.filter(slot=>slot.startsWith(side)&&!!slotUid(r,slot));
-const balanced=r=>{const h=team(r,'host'),g=team(r,'guest');return h.length===g.length&&h.length>0&&h.every(x=>slotReady(r,x))&&g.every(x=>slotReady(r,x))};
+const balanced=r=>{const h=team(r,'host'),g=team(r,'guest');return h.length===g.length&&h.length>0&&(h.length===1||r.scenario!=='swarm')&&h.every(x=>slotReady(r,x))&&g.every(x=>slotReady(r,x))};
 function show(r){
  current=r;
  const host=team(r,'host'),guest=team(r,'guest'),equal=host.length===guest.length&&host.length>0,ready=balanced(r);
@@ -27,7 +27,7 @@ function show(r){
  $('guestState').textContent=guest.map(slot=>(slot==='guest'?'P1':'P2')+': '+(slotReady(r,slot)?'READY':'WAITING')).join(' · ')||'AWAITING PILOT';
  $('balanceState').textContent=host.length+' vs '+guest.length+(equal?' · BALANCED':' · UNEVEN — LAUNCH BLOCKED');
  $('balanceState').className=equal?'ok':'wait';
- $('sessionState').textContent=ready?'ALL PILOTS READY · LAUNCH ENABLED':!equal?'WAITING FOR EQUAL TEAM SIZES':'WAITING FOR ALL PILOTS TO READY';
+ $('sessionState').textContent=ready?'ALL PILOTS READY · LAUNCH ENABLED':!equal?'WAITING FOR EQUAL TEAM SIZES':host.length===2&&r.scenario==='swarm'?'SWARM IS 1v1 ONLY · SELECT DUEL FOR 2v2':'WAITING FOR ALL PILOTS TO READY';
  $('ready').textContent=slotReady(r,role)?'CANCEL READY':'MARK READY';$('ready').disabled=false;
 }
 function subscribe(code){unsubscribe?.();room=code;unsubscribe=onSnapshot(doc(db,'rooms',room),snap=>{
