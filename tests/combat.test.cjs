@@ -376,3 +376,14 @@ test('battle seed is saved in room and validated by Firestore security rules',()
  assert.match(rules,/request\.resource\.data\.seed is int/);
  assert.match(source,/const seed=Number\.isInteger\(r\.seed\)/);
 });
+
+test('online multiplayer forbids swarm while local AI can launch 1v14',()=>{
+ const lobby=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ const local=fs.readFileSync(path.join(__dirname,'../game.html'),'utf8');
+ const rules=fs.readFileSync(path.join(__dirname,'../firestore.rules'),'utf8');
+ assert.doesNotMatch(lobby,/<option value="swarm">/);
+ assert.match(lobby,/game\.html\?scenario=swarm&mode=ai/);
+ assert.match(local,/launch\.get\('scenario'\)/);
+ assert.match(rules,/request\.resource\.data\.scenario == 'duel'/);
+ assert.match(source,/if\(r\.scenario==='swarm'\|\|hosts!==guests/);
+});
