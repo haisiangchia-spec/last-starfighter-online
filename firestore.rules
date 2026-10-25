@@ -47,7 +47,12 @@ service cloud.firestore {
         function host() { return request.auth != null && roomData().hostUid == request.auth.uid; }
         function side() { return host() ? 'host' : roomData().guestUid == request.auth.uid ? 'guest' : roomData().host2Uid == request.auth.uid ? 'host2' : 'guest2'; }
         allow read: if member();
-        allow create: if member() && host() && battleId == 'state';
+        allow create: if member() && host() && battleId == 'state'
+          && roomData().hostReady == true && roomData().guestReady == true
+          && ((roomData().host2Uid == null && roomData().guest2Uid == null)
+            || (roomData().host2Uid != null && roomData().guest2Uid != null
+              && roomData().host2Ready == true && roomData().guest2Ready == true
+              && roomData().scenario == 'duel'));
         // Prototype: clients resolve turns. Production must move authoritative writes to backend.
         allow update: if member() && battleId == 'state' && (
           (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['submitted'])
