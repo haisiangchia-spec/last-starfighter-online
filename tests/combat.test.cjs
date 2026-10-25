@@ -12,7 +12,7 @@ assert.ok(start>=0&&end>start,'Combat engine source boundaries changed');
 const engine=source.slice(start,end);
 const sandbox={structuredClone,console};
 vm.createContext(sandbox);
-vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,apply,applyDoubles,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget};',sandbox,{filename:'online-battle.js'});
+vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget};',sandbox,{filename:'online-battle.js'});
 const c=sandbox.combat;
 const orders=(host={plan:'',fire:'none'},guest={plan:'',fire:'none'})=>({host,guest});
 function scenario(){const s=c.initial(false);s.log=[];return s}
@@ -273,4 +273,59 @@ test('sealed order IDs are scoped to a unique match for rematches',()=>{
 test('2v2 shows four fleet statuses and does not end when only one ship is lost',()=>{
  assert.match(source,/fleetStatus/);
  assert.match(source,/const defeated=side=>battleSlots\.filter\(x=>teamSide\(x\)===side\)\.every\(x=>out\.ships\[x\]\.dead\)/);
+});
+
+test('asteroid check is identical for first pilots in 1v1 and 2v2',()=>{
+ const a=c.initial(true),b=c.initialDoubles(true),orders1={host:{plan:'FFFF',fire:'none'},guest:{plan:'',fire:'none'}};
+ const orders2={host:orders1.host,guest:orders1.guest,host2:{plan:'',fire:'none'},guest2:{plan:'',fire:'none'}};
+ a.ships.host.q=5;a.ships.host.r=3;a.ships.host.d=0;
+ b.ships.host.q=5;b.ships.host.r=3;b.ships.host.d=0;
+ const x=c.apply(a,orders1),y=c.apply(b,orders2);
+ assert.equal(x.ships.host.asteroidChecks,y.ships.host.asteroidChecks);
+ assert.equal(x.ships.host.asteroidImpacts||0,y.ships.host.asteroidImpacts||0);
+});
+test('asteroid collision checks are performed once per entered rock hex and logged',()=>{
+ const ship={...c.initial(false).ships.host,q:6,r:3};
+ const rocks=c.rocksFor(c.initial(true)),events=[];
+ c.asteroidCollision(ship,rocks,1,'host',0,4,events);
+ assert.equal(ship.asteroidChecks,1);
+ assert.match(events[0],/ASTEROID HEX 6,3: 2D6 .* VS 6/);
+});
+test('asteroid-free hex never triggers collision check',()=>{
+ const ship={...c.initial(false).ships.host,q:5,r:3},events=[];
+ assert.equal(c.asteroidCollision(ship,c.rocksFor(c.initial(true)),1,'host',0,3,events),false);
+ assert.equal(events.length,0);
+ assert.equal(ship.asteroidChecks,undefined);
+});
+test('missile splash hits every adjacent ship including friendlies in 2v2',()=>{
+ const s=c.initialDoubles(false);
+ s.ships.guest.q=8;s.ships.guest.r=6;
+ s.ships.guest2.q=8;s.ships.guest2.r=7;
+ s.ships.host.q=9;s.ships.host.r=6;
+ s.ships.host2.q=3;s.ships.host2.r=3;
+ const hits={host:[],guest:[],host2:[],guest2:[]},events=[];
+ c.missileBlast(s,c.rocksFor(s),s.ships.guest,hits,events,'host2');
+ assert.equal(hits.guest.length,1);
+ assert.equal(hits.guest2.length,1);
+ assert.equal(hits.host.length,1);
+ assert.equal(hits.host2.length,0);
+});
+test('missile hitting an asteroid hex destroys rock and restricts blast to occupants',()=>{
+ const s=c.initialDoubles(true);
+ s.ships.guest.q=6;s.ships.guest.r=3;
+ s.ships.guest2.q=6;s.ships.guest2.r=4;
+ s.ships.host.q=6;s.ships.host.r=3;
+ const hits={host:[],guest:[],host2:[],guest2:[]},events=[],rocks=c.rocksFor(s);
+ c.missileBlast(s,rocks,s.ships.guest,hits,events,'host2');
+ assert.equal(hits.host.length,1);
+ assert.equal(hits.guest.length,1);
+ assert.equal(hits.guest2.length,0);
+ assert.equal(rocks.has('6,3'),false);
+ assert.ok(!s.asteroids.some(([q,r])=>q===6&&r===3));
+ assert.match(events.join(' '),/ASTEROID DESTROYED/);
+});
+test('line-of-sight blocking applies in 2v2 as in 1v1',()=>{
+ const a={q:5,r:3},b={q:9,r:3},rocks=c.rocksFor(c.initial(true));
+ assert.equal(c.firingBlocked(a,b,rocks),true);
+ assert.equal(c.firingBlocked(a,b,new Set()),false);
 });
