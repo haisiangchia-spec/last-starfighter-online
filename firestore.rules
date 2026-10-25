@@ -53,7 +53,7 @@ service cloud.firestore {
           (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['submitted'])
            && resource.data.submitted[side()] == false
            && request.resource.data.submitted[side()] == true
-           && request.request.resource.data.diff(resource.data).affectedKeys().hasOnly(['submitted']))
+           && request.resource.data.submitted[side() == 'host' ? 'guest' : 'host'] == resource.data.submitted[side() == 'host' ? 'guest' : 'host'])
           || (resource.data.submitted.host == true && resource.data.submitted.guest == true && (!('host2' in resource.data.submitted) || resource.data.submitted.host2 == true) && (!('guest2' in resource.data.submitted) || resource.data.submitted.guest2 == true)
               && request.resource.data.turn == resource.data.turn + 1)
           || (host() && request.resource.data.phase == 'ended' && resource.data.phase != 'ended' && request.resource.data.turn == resource.data.turn)
@@ -72,6 +72,7 @@ service cloud.firestore {
           && battle().submitted[side()] == false
           && request.resource.data.owner == request.auth.uid
           && request.resource.data.turn == battle().turn
+          && (!('target' in request.resource.data) || request.resource.data.target in ['host','guest','host2','guest2',''])
           && request.resource.data.plan is string
           && request.resource.data.plan.matches('[FLR]{0,5}')
           && request.resource.data.fire in ['laser','particle','missile','guard','none','laser+particle','laser+missile','particle+missile','laser+particle+missile']
