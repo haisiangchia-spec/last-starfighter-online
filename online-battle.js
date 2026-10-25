@@ -57,7 +57,7 @@ function missileBlast(out,rocks,target,hits,events,source){
   if(ship.dead)continue;
   if((rockHit&&ship.q===target.q&&ship.r===target.r)||(!rockHit&&distance(ship,target)<=1)){
    hits[slot].push('missile');
-   events.push(source.toUpperCase()+' MISSILE BLAST → '+slot.toUpperCase()+' AT '+ship.q+','+ship.r);
+   events.push(source.toUpperCase()+' MISSILE BLAST → '+(teamSide(slot)==='host'?'STAR LEAGUE':'KO-DAN')+' '+slot.toUpperCase()+' AT '+ship.q+','+ship.r);
   }
  }
  if(rockHit){
