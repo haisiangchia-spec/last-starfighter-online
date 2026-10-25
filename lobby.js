@@ -63,7 +63,15 @@ async function joinRoom(code){if(!uid)return;code=code.toUpperCase().trim();
  subscribe(code);history.replaceState(null,'','#room='+code);
  }catch(e){error(e)}
 }
-const asteroidPositions=[[6,3],[7,4],[8,7],[10,5],[12,8],[14,4]];
+// Same seeded LCG and 22-placement algorithm as game.html and online-battle.js.
+function asteroidPositionsForSeed(seed=1984){
+ let rng=(Number(seed)>>>0)||1;
+ const random=()=>{rng=(Math.imul(1664525,rng)+1013904223)>>>0;return rng/4294967296};
+ const rocks=new Set();
+ for(let i=0;i<22;i++){const q=5+Math.floor(random()*9),r=Math.floor(random()*13);rocks.add(q+','+r)}
+ return [...rocks].map(p=>p.split(',').map(Number));
+}
+const asteroidPositions=asteroidPositionsForSeed();
 function drawAsteroidPreview(enabled){
  const canvas=$('asteroidPreview');if(!canvas)return;
  const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
@@ -71,7 +79,7 @@ function drawAsteroidPreview(enabled){
  const scale=Math.min((w-40)/24,(h-28)/16),point=(q,r)=>[22+scale*(q+r/2),16+scale*.87*r];
  for(let q=0;q<19;q++)for(let r=0;r<13;r++){const [x,y]=point(q,r);ctx.beginPath();ctx.arc(x,y,1.1,0,Math.PI*2);ctx.fillStyle='#265263';ctx.fill()}
  if(enabled)for(const [q,r] of asteroidPositions){const [x,y]=point(q,r);ctx.beginPath();for(let i=0;i<7;i++){const a=i*Math.PI*2/7,rad=i%2?6:8;i?ctx.lineTo(x+rad*Math.cos(a),y+rad*Math.sin(a)):ctx.moveTo(x+rad*Math.cos(a),y+rad*Math.sin(a))}ctx.closePath();ctx.fillStyle='#9d6a35';ctx.fill();ctx.strokeStyle='#ffc65b';ctx.lineWidth=1.4;ctx.stroke()}
- ctx.font='12px monospace';ctx.fillStyle=enabled?'#ffc65b':'#9ab1bc';ctx.fillText(enabled?'6 ASTEROIDS · ENABLED':'CLEAR SPACE · NO ASTEROIDS',12,h-10);
+ ctx.font='12px monospace';ctx.fillStyle=enabled?'#ffc65b':'#9ab1bc';ctx.fillText(enabled?asteroidPositions.length+' ASTEROIDS · SEED 1984':'CLEAR SPACE · NO ASTEROIDS',12,h-10);
 }
 async function saveScenario(){
  if(role!=='host'||!room||!current)return;
@@ -79,7 +87,7 @@ async function saveScenario(){
  try{
   const asteroid=$('lobbyAsteroids').checked,scenario=$('scenarioChoice').value;
   await updateDoc(doc(db,'rooms',room),{scenario,asteroids:asteroid,hostReady:false,guestReady:false,host2Ready:false,guest2Ready:false});
-  notice('SAVED: '+(asteroid?'ASTEROID FIELD ENABLED (6 ROCKS)':'CLEAR SPACE')+'. All pilots must ready up again.');
+  notice('SAVED: '+(asteroid?'ASTEROID FIELD ENABLED ('+asteroidPositions.length+' ROCKS)':'CLEAR SPACE')+'. All pilots must ready up again.');
  }catch(e){error(e);$('lobbyAsteroids').checked=!!current.asteroids;drawAsteroidPreview(!!current.asteroids)}
  finally{button.disabled=false}
 }
