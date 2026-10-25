@@ -333,7 +333,7 @@ test('line-of-sight blocking applies in 2v2 as in 1v1',()=>{
 test('asteroid positions serialize to Firestore-safe primitives, never nested arrays',()=>{
  for(const scenario of [c.initial(true),c.initialDoubles(true)]){
   assert.ok(scenario.asteroids.length>0);
-  assert.ok(scenario.asteroids.every(x=>typeof x==='string'&&/^\\d+,\\d+$/.test(x)));
+  assert.ok(scenario.asteroids.every(x=>typeof x==='string'&&/^[0-9]+,[0-9]+$/.test(x)));
   assert.ok(!scenario.asteroids.some(Array.isArray));
   assert.equal(c.rocksFor(scenario).size,scenario.asteroids.length);
  }
