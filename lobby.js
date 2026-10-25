@@ -18,7 +18,7 @@ function show(r){
  current=r;
  const host=team(r,'host'),guest=team(r,'guest'),equal=host.length===guest.length&&host.length>0,ready=balanced(r);
  $('scenarioSettings').hidden=role!=='host';
- $('scenarioChoice').value=r.scenario||'duel';$('lobbyAsteroids').checked=!!r.asteroids;
+ $('scenarioChoice').value=r.scenario||'duel';$('lobbyAsteroids').checked=!!r.asteroids;drawAsteroidPreview(!!r.asteroids);
  $('scenarioStatus').textContent=(r.scenario==='swarm'?'KO-DAN SWARM (EXPERIMENTAL)':'GUNSTAR DUEL')+(r.asteroids?' · ASTEROIDS':' · CLEAR SPACE');
  $('launch').disabled=!ready;
  $('roomPanel').hidden=false;$('roomCode').textContent=room;
@@ -62,10 +62,29 @@ async function joinRoom(code){if(!uid)return;code=code.toUpperCase().trim();
  subscribe(code);history.replaceState(null,'','#room='+code);
  }catch(e){error(e)}
 }
-$('saveScenario').onclick=async()=>{if(role!=='host'||!room||!current)return;try{
- await updateDoc(doc(db,'rooms',room),{scenario:$('scenarioChoice').value,asteroids:$('lobbyAsteroids').checked,hostReady:false,guestReady:false,host2Ready:false,guest2Ready:false});
- notice('Mission settings saved. All pilots must ready up again.');
-}catch(e){error(e)}};
+const asteroidPositions=[[6,3],[7,4],[8,7],[10,5],[12,8],[14,4]];
+function drawAsteroidPreview(enabled){
+ const canvas=$('asteroidPreview');if(!canvas)return;
+ const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
+ ctx.clearRect(0,0,w,h);ctx.fillStyle='#081a25';ctx.fillRect(0,0,w,h);
+ const scale=Math.min((w-40)/24,(h-28)/16),point=(q,r)=>[22+scale*(q+r/2),16+scale*.87*r];
+ for(let q=0;q<19;q++)for(let r=0;r<13;r++){const [x,y]=point(q,r);ctx.beginPath();ctx.arc(x,y,1.1,0,Math.PI*2);ctx.fillStyle='#265263';ctx.fill()}
+ if(enabled)for(const [q,r] of asteroidPositions){const [x,y]=point(q,r);ctx.beginPath();for(let i=0;i<7;i++){const a=i*Math.PI*2/7,rad=i%2?6:8;i?ctx.lineTo(x+rad*Math.cos(a),y+rad*Math.sin(a)):ctx.moveTo(x+rad*Math.cos(a),y+rad*Math.sin(a))}ctx.closePath();ctx.fillStyle='#9d6a35';ctx.fill();ctx.strokeStyle='#ffc65b';ctx.lineWidth=1.4;ctx.stroke()}
+ ctx.font='12px monospace';ctx.fillStyle=enabled?'#ffc65b':'#9ab1bc';ctx.fillText(enabled?'6 ASTEROIDS · ENABLED':'CLEAR SPACE · NO ASTEROIDS',12,h-10);
+}
+async function saveScenario(){
+ if(role!=='host'||!room||!current)return;
+ const button=$('saveScenario');button.disabled=true;
+ try{
+  const asteroid=$('lobbyAsteroids').checked,scenario=$('scenarioChoice').value;
+  await updateDoc(doc(db,'rooms',room),{scenario,asteroids:asteroid,hostReady:false,guestReady:false,host2Ready:false,guest2Ready:false});
+  notice('SAVED: '+(asteroid?'ASTEROID FIELD ENABLED (6 ROCKS)':'CLEAR SPACE')+'. All pilots must ready up again.');
+ }catch(e){error(e);$('lobbyAsteroids').checked=!!current.asteroids;drawAsteroidPreview(!!current.asteroids)}
+ finally{button.disabled=false}
+}
+$('saveScenario').onclick=saveScenario;
+$('lobbyAsteroids').addEventListener('change',()=>{drawAsteroidPreview($('lobbyAsteroids').checked);saveScenario()});
+$('scenarioChoice').addEventListener('change',saveScenario);
 $('create').onclick=createRoom;$('join').onclick=()=>joinRoom($('codeInput').value);
 $('launch').onclick=()=>{if(!current||!balanced(current)){notice('Launch blocked: equal teams and all pilots ready required.');return}location.href='./online-battle.html#room='+room};
 $('ready').onclick=async()=>{if(!room||!role||!current)return;try{
