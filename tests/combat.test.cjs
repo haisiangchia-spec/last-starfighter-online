@@ -321,11 +321,20 @@ test('missile hitting an asteroid hex destroys rock and restricts blast to occup
  assert.equal(hits.guest.length,1);
  assert.equal(hits.guest2.length,0);
  assert.equal(rocks.has('6,3'),false);
- assert.ok(!s.asteroids.some(([q,r])=>q===6&&r===3));
+ assert.ok(!s.asteroids.some(p=>p==='6,3'));
  assert.match(events.join(' '),/ASTEROID DESTROYED/);
 });
 test('line-of-sight blocking applies in 2v2 as in 1v1',()=>{
  const a={q:5,r:3},b={q:9,r:3},rocks=c.rocksFor(c.initial(true));
  assert.equal(c.firingBlocked(a,b,rocks),true);
  assert.equal(c.firingBlocked(a,b,new Set()),false);
+});
+
+test('asteroid positions serialize to Firestore-safe primitives, never nested arrays',()=>{
+ for(const scenario of [c.initial(true),c.initialDoubles(true)]){
+  assert.ok(scenario.asteroids.length>0);
+  assert.ok(scenario.asteroids.every(x=>typeof x==='string'&&/^\\d+,\\d+$/.test(x)));
+  assert.ok(!scenario.asteroids.some(Array.isArray));
+  assert.equal(c.rocksFor(scenario).size,scenario.asteroids.length);
+ }
 });
