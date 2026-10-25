@@ -71,7 +71,7 @@ service cloud.firestore {
         function side() { return roomData().hostUid == request.auth.uid ? 'host' : roomData().guestUid == request.auth.uid ? 'guest' : roomData().host2Uid == request.auth.uid ? 'host2' : 'guest2'; }
         function member() { return request.auth != null && (roomData().hostUid == request.auth.uid || roomData().guestUid == request.auth.uid || roomData().host2Uid == request.auth.uid || roomData().guest2Uid == request.auth.uid); }
         function battle() { return get(/databases/$(database)/documents/rooms/$(roomId)/combat/state).data; }
-        allow get: if member() && (orderId == (string(battle().turn) + '_' + side()) || (battle().submitted.host == true && battle().submitted.guest == true));
+        allow get: if member() && (orderId == (battle().matchId + '_' + string(battle().turn) + '_' + side()) || (battle().submitted.host == true && battle().submitted.guest == true));
         allow list: if false;
         allow create: if member() && orderId == (string(battle().turn) + '_' + side())
           && battle().submitted[side()] == false
