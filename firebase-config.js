@@ -1,4 +1,4 @@
-window.STARFIGHTER_FIREBASE_CONFIG = {
+export const firebaseConfig = {
   apiKey: "AIzaSyBazznDBoAsVP0cD6SI3PDzdNCyomc2CzE",
   authDomain: "starfighter-online.firebaseapp.com",
   projectId: "starfighter-online",
