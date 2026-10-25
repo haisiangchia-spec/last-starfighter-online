@@ -54,7 +54,7 @@ service cloud.firestore {
           && request.resource.data.turn == battle().turn
           && request.resource.data.plan is string
           && request.resource.data.plan.matches('[FLR]{0,5}')
-          && request.resource.data.fire in ['fire','guard'];
+          && request.resource.data.fire in ['laser','particle','missile','guard'];
         allow update, delete: if false;
       }
     }
