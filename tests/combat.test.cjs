@@ -238,3 +238,30 @@ test('2v2 combat uses explicit enemy target',()=>{
  for(let turn=1;turn<=100;turn++){s.turn=turn;const next=c.apply(s,o);if(next.lastVolley.shots.some(x=>x.side==='host')){fired=true;assert.ok(next.log.some(x=>x.includes('HOST LASER → GUEST2')));break}}
  assert.ok(fired);
 });
+
+test('2v2 never declares victory merely because both opposing pilots are killed',()=>{
+ const battle=c.initialDoubles(false),orders={};
+ for(const slot of Object.keys(battle.ships))orders[slot]={plan:'',fire:'none',target:''};
+ battle.ships.guest.pilot=6;battle.ships.guest2.pilot=6;
+ const next=c.apply(battle,orders);
+ assert.equal(next.winner,null);
+ assert.equal(next.phase,'orders');
+ assert.equal(next.ships.guest.dead,false);
+ assert.equal(next.ships.guest2.dead,false);
+});
+test('2v2 defeat requires both enemy ships physically destroyed, even when one pilot is dead',()=>{
+ const battle=c.initialDoubles(false),orders={};
+ for(const slot of Object.keys(battle.ships))orders[slot]={plan:'',fire:'none',target:''};
+ battle.ships.guest.dead=true;battle.ships.guest2.pilot=6;
+ assert.equal(c.apply(battle,orders).winner,null);
+ battle.ships.guest2.dead=true;
+ assert.equal(c.apply(battle,orders).winner,'STAR LEAGUE');
+});
+test('2v2 simultaneous destruction of both fleets produces draw',()=>{
+ const battle=c.initialDoubles(false),orders={};
+ for(const slot of Object.keys(battle.ships))orders[slot]={plan:'',fire:'none',target:''};
+ for(const slot of Object.keys(battle.ships))battle.ships[slot].dead=true;
+ const next=c.apply(battle,orders);
+ assert.equal(next.winner,'DRAW');
+ assert.equal(next.phase,'finished');
+});
