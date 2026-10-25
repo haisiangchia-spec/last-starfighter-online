@@ -163,3 +163,17 @@ test('multiplayer telemetry exposes all local ship damage and survival fields',(
  }
  assert.ok(render.includes('inspect.hull'),'Telemetry must display inspected ship hull');
 });
+
+test('original damage narration reports fuselage and engine effects',()=>{
+ const ship=scenario().ships.host,events=[];
+ c.damageShip(ship,'laser',23,'host',events);
+ const result=events.find(x=>x.includes('GS-01 DAMAGE RESULT:'));
+ assert.ok(result);
+ if(ship.hull>0)assert.ok(events.some(x=>x.includes('GS-01 FUSELAGE +')));
+ if(ship.engine>0)assert.ok(events.some(x=>x.includes('GS-01 ENGINE +')));
+});
+test('original combat log effect labels are retained',()=>{
+ for(const label of ['FUSELAGE +','ENGINE +','TARGETING COMPUTER DAMAGED','STEERING RESTRICTION pending','STABILIZER DAMAGED','HALF SPEED restriction pending','NO SPEED CHANGE restriction pending','CREW HIT:','LIFE SUPPORT DAMAGED','WEAPON DESTROYED:','EXPLODES / REMOVED FROM ACTIVE PLAY']){
+  assert.ok(source.includes(label),'Missing original combat narration: '+label);
+ }
+});
