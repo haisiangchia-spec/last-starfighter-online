@@ -26,7 +26,16 @@ function facingToTarget(a,b){
 }
 function inArc(a,b){const t=facingToTarget(a,b);return ((t-a.d+6)%6)<=1||((a.d-t+6)%6)<=1}
 
-const asteroidHexes=['6,3','7,4','8,7','10,5','12,8','14,4'];const rockKey=(q,r)=>q+','+r;const rockCoords=p=>typeof p==='string'?p.split(',').map(Number):Array.isArray(p)?p:[p.q,p.r];const rocksFor=s=>new Set((s?.asteroids||[]).map(p=>{const [q,r]=rockCoords(p);return rockKey(q,r)}));
+// Match local game.html: 22 seeded placement attempts in columns 5–13.
+// Duplicates collapse to unique asteroid hexes; default local replay seed is 1984.
+function generateAsteroidField(seed=1984,occupied=[]){
+ let rng=(Number(seed)>>>0)||1;
+ const random=()=>{rng=(Math.imul(1664525,rng)+1013904223)>>>0;return rng/4294967296};
+ const blocked=new Set(occupied.map(p=>typeof p==='string'?p:p.q+','+p.r)),rocks=new Set();
+ for(let i=0;i<22;i++){const q=5+Math.floor(random()*9),r=Math.floor(random()*13),key=q+','+r;if(!blocked.has(key))rocks.add(key)}
+ return [...rocks];
+}
+const asteroidHexes=generateAsteroidField(1984);const rockKey=(q,r)=>q+','+r;const rockCoords=p=>typeof p==='string'?p.split(',').map(Number):Array.isArray(p)?p:[p.q,p.r];const rocksFor=s=>new Set((s?.asteroids||[]).map(p=>{const [q,r]=rockCoords(p);return rockKey(q,r)}));
 function hexLine(a,b){const n=distance(a,b),line=[];for(let i=1;i<n;i++){
  const t=i/n,x=a.q+(b.q-a.q)*t,z=a.r+(b.r-a.r)*t,y=-x-z;
  const rx0=Math.round(x+1e-7),ry0=Math.round(y+1e-7),rz0=Math.round(z-2e-7);
@@ -67,7 +76,7 @@ function missileBlast(out,rocks,target,hits,events,source){
  }
 }
 function firingBlocked(a,b,rocks){return blocked(a,b,rocks)||(rocks.has(rockKey(a.q,a.r))&&rocks.has(rockKey(b.q,b.r)))}
-const initial=(asteroids=false)=>({scenario:'duel',asteroids:asteroids?asteroidHexes:[],turn:1,ships:{host:{q:2,r:6,d:0,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false},guest:{q:16,r:6,d:3,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false}},submitted:{host:false,guest:false},phase:'orders',log:['Skirmish initiated. Both pilots must submit orders.'],winner:null});
+const initial=(asteroids=false)=>({scenario:'duel',asteroids:asteroids?generateAsteroidField(1984,[{q:2,r:6},{q:16,r:6}]):[],turn:1,ships:{host:{q:2,r:6,d:0,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false},guest:{q:16,r:6,d:3,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false}},submitted:{host:false,guest:false},phase:'orders',log:['Skirmish initiated. Both pilots must submit orders.'],winner:null});
 
 // Swarm mode keeps a single Gunstar under host control and fourteen individual
 // Ko-Dan contacts under guest control. Each contact has its own sealed vector.
