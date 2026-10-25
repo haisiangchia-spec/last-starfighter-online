@@ -186,3 +186,16 @@ test('sealed orders show a clear opponent-specific waiting indicator',()=>{
  assert.ok(render.includes("state.submitted[role]"));
  assert.ok(render.includes("state.submitted[other]"));
 });
+
+test('destroyed duel ships are skipped by the tactical map renderer',()=>{
+ const draw=source.slice(source.indexOf('function draw('),source.indexOf('function animateTurn('));
+ assert.match(draw,/const sh=state\.ships\[side\];if\(sh\.dead\)continue/);
+});
+test('victory defeat and draw banner is driven by synchronized winner state',()=>{
+ assert.match(source,/function showBattleResult\(\)/);
+ assert.match(source,/state\.phase==='finished'\|\|!!state\.winner/);
+ assert.match(source,/VICTORY · /);
+ assert.match(source,/DEFEAT · /);
+ assert.match(source,/BATTLE ENDED IN A DRAW/);
+ assert.match(source,/function render\(\)\{if\(!state\|\|!role\)return;showBattleResult\(\)/);
+});
