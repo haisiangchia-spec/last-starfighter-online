@@ -149,3 +149,17 @@ test('constant speed orders require the exact permitted movement length',()=>{
  assert.equal(next.ships.host.q,ship.q);
  assert.ok(next.log.some(x=>x.includes('INVALID VECTOR')));
 });
+
+test('damage reports include system changes and printed table result',()=>{
+ const ship=scenario().ships.host,events=[];
+ c.damageShip(ship,'laser',23,'host',events);
+ assert.ok(events.some(x=>x.includes('DAMAGE')&&x.includes('TABLE')));
+ assert.ok(events.some(x=>x.includes('GS-01 DAMAGE RESULT:')));
+});
+test('multiplayer telemetry exposes all local ship damage and survival fields',()=>{
+ const render=source.slice(source.indexOf('function render()'),source.indexOf("$('submit').onclick"));
+ for(const label of ['LASER MOUNTS','PARTICLE CANNON','MISSILE RACK','PHOTON AMMO','FIRE CHANNELS','TARGETING','LIFE SUPPORT','NEXT-TURN DAMAGE','ASTEROID CHECKS','SPEED LOCK','STABILIZER','ENGINE DAMAGE','VECTOR SYSTEMS','HULL STATUS']){
+  assert.ok(render.includes(label),'Missing local telemetry field: '+label);
+ }
+ assert.ok(render.includes('inspect.hull'),'Telemetry must display inspected ship hull');
+});
