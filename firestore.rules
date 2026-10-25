@@ -52,7 +52,7 @@ service cloud.firestore {
           && battle().submitted[side()] == false
           && request.resource.data.owner == request.auth.uid
           && request.resource.data.turn == battle().turn
-          && request.resource.data.move in ['hold','n','ne','se','s','sw','nw']
+          && request.resource.data.move in ['hold','F','L','R']
           && request.resource.data.fire in ['fire','guard'];
         allow update, delete: if false;
       }
