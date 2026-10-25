@@ -388,9 +388,11 @@ test('online multiplayer forbids swarm while local AI can launch 1v14',()=>{
  assert.match(source,/if\(r\.scenario==='swarm'\|\|hosts!==guests/);
 });
 
-test('local 1v14 Swarm fighters face west toward the Gunstar in both asteroid modes',()=>{
+test('local Swarm follows rulebook: no-asteroid ships face away; asteroid ships face Gunstar',()=>{
  const local=fs.readFileSync(path.join(__dirname,'../game.html'),'utf8');
- assert.match(local,/10\+2\*wave,r,3\)/);
+ assert.match(local,/make\('GS-01','gunstar','star',5,6,0\)/);
+ assert.match(local,/10\+2\*wave,r,0\)/);
+ assert.match(local,/make\('GS-01','gunstar','star',0,6,0\)/);
  assert.match(local,/16\+2\*wave,r,3\)/);
- assert.doesNotMatch(local,/10\+2\*wave,r,0\)/);
+ assert.doesNotMatch(local,/10\+2\*wave,r,3\)/);
 });
