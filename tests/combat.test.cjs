@@ -387,3 +387,10 @@ test('online multiplayer forbids swarm while local AI can launch 1v14',()=>{
  assert.match(rules,/request\.resource\.data\.scenario == 'duel'/);
  assert.match(source,/if\(r\.scenario==='swarm'\|\|hosts!==guests/);
 });
+
+test('local 1v14 Swarm fighters face west toward the Gunstar in both asteroid modes',()=>{
+ const local=fs.readFileSync(path.join(__dirname,'../game.html'),'utf8');
+ assert.match(local,/10\+2\*wave,r,3\)/);
+ assert.match(local,/16\+2\*wave,r,3\)/);
+ assert.doesNotMatch(local,/10\+2\*wave,r,0\)/);
+});
