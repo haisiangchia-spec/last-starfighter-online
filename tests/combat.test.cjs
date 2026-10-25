@@ -98,9 +98,12 @@ test('two simultaneous hits resolve independently even when a ship is destroyed'
   if(next.lastVolley.shots.some(x=>x.side==='host'&&x.hit)&&next.lastVolley.shots.some(x=>x.side==='guest'&&x.hit)){resolved=next;break}
  }
  assert.ok(resolved,'Expected a turn where both sides land laser hits');
- assert.equal(resolved.winner,'DRAW');
+ // A hit can damage engines, power, or crew instead of hull. Both
+ // volleys must still resolve even if one ship suffers fatal damage.
  assert.ok(resolved.log.some(x=>x.includes('STAR LEAGUE DAMAGE')));
  assert.ok(resolved.log.some(x=>x.includes('KO-DAN DAMAGE')));
+ assert.ok(resolved.lastVolley.shots.some(x=>x.side==='host'&&x.hit));
+ assert.ok(resolved.lastVolley.shots.some(x=>x.side==='guest'&&x.hit));
 });
 test('newly injured crew misses the following turn and then receives recovery checks',()=>{
  const s=scenario();s.ships.host.pilot=4;s.ships.host.unconsciousPilot=2;
