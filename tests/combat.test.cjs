@@ -265,3 +265,12 @@ test('2v2 simultaneous destruction of both fleets produces draw',()=>{
  assert.equal(next.winner,'DRAW');
  assert.equal(next.phase,'finished');
 });
+
+test('sealed order IDs are scoped to a unique match for rematches',()=>{
+ assert.match(source,/const orderRef=\(turn,side,matchId=state\?\.matchId\)/);
+ assert.match(source,/matchId:crypto\.randomUUID\(\)/);
+});
+test('2v2 shows four fleet statuses and does not end when only one ship is lost',()=>{
+ assert.match(source,/fleetStatus/);
+ assert.match(source,/const defeated=side=>battleSlots\.filter\(x=>teamSide\(x\)===side\)\.every\(x=>out\.ships\[x\]\.dead\)/);
+});
