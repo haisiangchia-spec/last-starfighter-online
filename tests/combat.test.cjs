@@ -177,3 +177,12 @@ test('original combat log effect labels are retained',()=>{
   assert.ok(source.includes(label),'Missing original combat narration: '+label);
  }
 });
+
+test('sealed orders show a clear opponent-specific waiting indicator',()=>{
+ const render=source.slice(source.indexOf('function render()'),source.indexOf("$('submit').onclick"));
+ assert.ok(render.includes('WAITING FOR ${otherName} TO SUBMIT ORDERS'));
+ assert.ok(render.includes('HAS LOCKED ORDERS · YOUR ORDERS STILL PENDING'));
+ assert.ok(render.includes('BOTH PILOTS READY — resolving turn automatically.'));
+ assert.ok(render.includes("state.submitted[role]"));
+ assert.ok(render.includes("state.submitted[other]"));
+});
