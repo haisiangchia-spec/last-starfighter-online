@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /rooms/{roomId} {
+      function signedIn() { return request.auth != null; }
+      function member() { return signedIn() && (resource.data.hostUid == request.auth.uid || resource.data.guestUid == request.auth.uid); }
+      allow create: if signedIn()
+        && roomId.matches('[A-HJ-NP-Z2-9]{8}')
+        && request.resource.data.keys().hasOnly(['hostUid','guestUid','hostReady','guestReady','createdAt'])
+        && request.resource.data.hostUid == request.auth.uid
+        && request.resource.data.guestUid == null
+        && request.resource.data.hostReady == false
+        && request.resource.data.guestReady == false;
+      // A room code acts as an invitation secret. This allows prospective guests to look up a room.
+      allow get: if signedIn();
+      allow list: if false;
+      allow update: if signedIn() && (
+        // Join only an empty guest slot, without changing anything else.
+        (resource.data.guestUid == null && resource.data.hostUid != request.auth.uid
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guestUid'])
+         && request.resource.data.guestUid == request.auth.uid)
+        ||
+        // Each player can change only their own readiness flag.
+        (resource.data.hostUid == request.auth.uid
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostReady'])
+         && request.resource.data.hostReady is bool)
+        ||
+        (resource.data.guestUid == request.auth.uid
+         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guestReady'])
+         && request.resource.data.guestReady is bool)
+      );
+      allow delete: if false;
+    }
+  }
+}

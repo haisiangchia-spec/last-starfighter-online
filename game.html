@@ -1,0 +1,440 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>THE LAST STARFIGHTER // VECTOR COMMAND</title><style>
+:root{--cyan:#55f7ff;--amber:#ffc65b;--red:#ff5c77;--bg:#050a16;--panel:#0c1930;--line:#21445a;--muted:#7a9aaf}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 45% -10%,#15294d,#040710 70%);color:#d8f8ff;font:14px 'Courier New',monospace;letter-spacing:.3px}header{padding:15px 22px;border-bottom:2px solid var(--cyan);display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;background:#061123}h1{font-size:clamp(18px,3vw,31px);margin:0;color:var(--amber);letter-spacing:3px;text-shadow:0 0 13px #d96d28}small,.sub{color:var(--muted)}.tag{border:1px solid #33586b;padding:7px 10px;color:var(--cyan)}main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;padding:12px;max-width:1600px;margin:auto}.panel{border:1px solid var(--line);background:linear-gradient(155deg,#0c1930ee,#081020ee);box-shadow:inset 0 0 22px #05101e}.bar{padding:10px 13px;color:var(--amber);border-bottom:1px solid var(--line);font-weight:bold;letter-spacing:2px}.mapwrap{position:relative;overflow:hidden;height:min(69vh,720px);min-height:430px;background:radial-gradient(ellipse at center,#0a1b34,#040914)}canvas{display:block;width:100%;height:100%;touch-action:manipulation}.hud{position:absolute;left:12px;top:10px;color:#83d4df;pointer-events:none;text-shadow:0 0 6px #00b5d4;font-size:11px}.controls{padding:12px;display:flex;gap:8px;flex-wrap:wrap}.right{display:flex;flex-direction:column;gap:12px}button,select{background:#0a2638;color:var(--cyan);border:1px solid #31718b;padding:10px 11px;font:700 12px 'Courier New',monospace;cursor:pointer;min-height:38px}button:hover:not(:disabled){background:#16435a;box-shadow:0 0 10px #1d93ac66}button:disabled{opacity:.32;cursor:default}button.primary{background:#63411e;color:#ffe2a4;border-color:#b57d35}button.danger{color:#ff879b;border-color:#94364d}select{width:100%;margin-top:5px}.pad{padding:12px}.row{display:flex;justify-content:space-between;gap:10px;margin:7px 0}.value{color:var(--cyan)}.meter{height:9px;background:#132b3b;border:1px solid #2c4c62;margin:7px 0 12px}.meter>div{height:100%;background:linear-gradient(90deg,#2f8aa0,var(--cyan))}.meter.danger>div{background:var(--red)}.moves{display:flex;gap:5px;flex-wrap:wrap;margin:10px 0}.move{padding:7px;border:1px solid #39728b;color:var(--amber)}.status{color:var(--amber);min-height:40px;line-height:1.5}.log{height:285px;overflow:auto;font-size:11px;line-height:1.55;padding:12px;color:#9fd0dd}.log div{border-bottom:1px solid #173247;padding:4px 0}.weapon{display:flex;align-items:center;gap:8px;margin:8px 0}.weapon label{flex:1}.weapon input{accent-color:#55f7ff}.note{padding:11px 13px;color:#a6bfcd;line-height:1.6;font-size:12px}.foot{grid-column:1/-1}.legend{display:flex;gap:15px;flex-wrap:wrap;font-size:11px;color:#93b7c7;padding:8px 13px}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--cyan)}.dot.enemy{background:var(--red)}.dot.ast{background:var(--amber)}@media(max-width:900px){main{grid-template-columns:1fr}.mapwrap{height:52vh;min-height:350px}.right{display:grid;grid-template-columns:repeat(auto-fit,minmax(275px,1fr))}.foot{grid-column:1/-1}}@media(max-width:520px){header{padding:12px}main{padding:6px;gap:7px}.controls{padding:8px}button{padding:8px;font-size:11px}.mapwrap{height:390px}}
+.telemetry-heading{color:var(--amber);font-weight:bold;font-size:11px;letter-spacing:1px;border-top:1px solid #29516b;padding-top:11px;margin-top:13px;margin-bottom:7px}.telemetry-detail{display:grid;gap:5px}.telemetry-line{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:4px 6px;background:#0b2035;border-left:2px solid #28536b;font-size:11px;line-height:1.45}.telemetry-line span:first-child{color:#9eb9ca;flex:0 0 43%}.telemetry-line span:last-child{text-align:right;overflow-wrap:anywhere}.telemetry-line.warning{border-color:#ffc65b}.telemetry-line.warning span:last-child{color:#ffc65b}.telemetry-line.critical{border-color:#ff5c77}.telemetry-line.critical span:last-child{color:#ff788d}.telemetry-line.ok span:last-child{color:#7ce4c4}
+</style></head><body><header><div><h1>THE LAST STARFIGHTER</h1><div class="sub">VECTOR COMMAND // 1984 FASA RULES ADAPTATION · v4.0</div></div><div class="tag">◈ ARCADE TACTICAL DISPLAY ◈</div></header><main><section class="panel"><div class="bar">01 // STARFIELD TACTICAL GRID</div><div class="mapwrap"><canvas id="map"></canvas><div class="hud" id="mapHud">SECTOR 01 · HEX NAVIGATION · CONTACTS ACTIVE</div></div><div class="legend"><span><i class="dot"></i>STAR LEAGUE</span><span><i class="dot enemy"></i>KO-DAN</span><span><i class="dot ast"></i>ASTEROID FIELD</span><span>Tap any ship to inspect · Cyan = laser arc · Amber = particle arc</span></div><div class="controls"><button id="new" class="primary">NEW MISSION</button><button id="zoomIn">ZOOM +</button><button id="zoomOut">ZOOM −</button><button id="center">CENTER</button><button id="help">RULES / HELP</button></div></section><aside class="right"><section class="panel"><div class="bar">02 // ORDERS & WEAPONS</div><div class="pad"><div id="plotControls"><div>VECTOR PROGRAM <small>(FORWARD, LEFT, RIGHT)</small></div><div class="controls" style="padding:9px 0"><button id="fwd">↑ FWD</button><button id="left">↖ LEFT</button><button id="right">↗ RIGHT</button><button id="hold">HOLD</button><button id="undo">UNDO</button></div><div class="moves" id="moves"></div><div class="row"><span>GUNSTAR LASER ARC</span></div><select id="arc"><option value="0">FORWARD</option><option value="5">PORT</option><option value="1">STARBOARD</option><option value="3">AFT</option></select><div class="row"><span>FIRE CONTROL</span></div><div class="weapon"><input id="laser" type="checkbox" checked><label for="laser">LASERS</label><input id="particle" type="checkbox" checked><label for="particle">PARTICLE CANNON</label></div><div class="weapon"><input id="missile" type="checkbox"><label for="missile">PHOTON MISSILE (1)</label></div><div class="controls" style="padding:8px 0"><button class="primary" id="execute">COMMIT TURN</button><button id="recharge">RECHARGE</button><button id="blossom" class="danger">DEATH BLOSSOM</button></div></div></div></section><section class="panel"><div class="bar">03 // SHIP TELEMETRY · TAP ENEMY TO INSPECT</div><div class="pad"><div class="row"><b id="shipName">GUNSTAR GS-01</b><span id="shipFaction" class="value">STAR LEAGUE</span></div><div class="row"><span>POWER</span><span id="powerText">20 / 20</span></div><div class="meter"><div id="powerBar" style="width:100%"></div></div><div class="row"><span>FUSELAGE</span><span id="hullText">0 / 20</span></div><div class="meter danger"><div id="hullBar" style="width:0%"></div></div><div class="row"><span>ENGINES / VECTOR</span><span id="mobility">5 / 3</span></div><div class="row"><span>TARGETING PENALTY</span><span id="targetPenalty">+0</span></div><div class="row"><span>WEAPON SYSTEMS</span><span id="systems">3</span></div><div class="row"><span>MISSILES</span><span id="missiles">4</span></div><div class="row"><span>PILOT / GUNNER</span><span id="crew">OK / OK</span></div><div class="telemetry-heading">FLIGHT CONTROL / DAMAGE</div><div id="flightDetail" class="telemetry-detail"></div><div class="telemetry-heading">WEAPON DAMAGE / READINESS</div><div id="weaponDetail" class="telemetry-detail"></div><div class="telemetry-heading">CREW / SURVIVAL / PENDING EFFECTS</div><div id="survivalDetail" class="telemetry-detail"></div></div></section><section class="panel"><div class="bar">04 // MISSION CONTROL</div><div class="pad"><label>SCENARIO<select id="scenario"><option value="duel">STARFIGHTER DUEL · 1 VS 1</option><option value="swarm">KO-DAN SWARM · 1 VS 14</option></select></label><label style="display:block;margin-top:10px">OPPOSITION<select id="mode"><option value="ai">COMPUTER KO-DAN</option><option value="hotseat">LOCAL TWO-PLAYER</option></select></label><label style="display:block;margin-top:10px">ASTEROIDS<select id="asteroids"><option value="none">CLEAR SPACE</option><option value="field">ASTEROID CLUSTERS (EXPERIMENTAL LOS)</option></select></label><label style="display:block;margin-top:10px">BATTLE RANDOM SEED <input id="battleSeed" type="number" min="1" max="4294967295" step="1" value="1984" style="width:100%;background:#061425;color:#b8faff;border:1px solid #386a87;padding:7px;margin-top:4px"></label><div style="font-size:11px;opacity:.8;margin-top:5px">Same seed + same orders = reproducible dice and AI decisions.</div><div class="row"><span>TURN</span><strong class="value" id="turn">01</strong></div><div class="row"><span>PHASE</span><strong class="value" id="phase">PLOT</strong></div><div class="status" id="status">Plot a movement course.</div></div></section></aside><section class="panel foot"><div class="bar">05 // COMBAT TRANSMISSIONS</div><div class="controls" style="padding:8px 12px"><button id="copyBattleReport">COPY SEEDED BATTLE REPORT</button></div><div class="log" id="log"></div></section><section class="panel foot"><div class="bar">BUILD STATUS // RULEBOOK IMPLEMENTATION v4.0 · SEEDED BATTLES</div><div class="note">Playable prototype with original-style movement, firing bases, 2d6 attacks, 36-result damage chart, energy, missiles, and scenario objectives. Missile ammunition is now consumed only when a valid shot is launched. The scanned rules are the reference. Enter a battle seed before NEW MISSION to replay the same dice and computer choices with the same orders. Built-in diagnostics include fleet-scale tests and Death Blossom power-boundary checks. <b>Not yet a fully verified reproduction:</b> some edge cases remain unverified: precise printed mapsheet hex positions, simultaneous damage effects, and original asteroid boundary conventions. Browser smoke tests cover both AI and hot-seat turn completion; multi-turn Swarm combat and full hot-seat fleet order entry have been browser-tested in earlier builds; full scenario completion under every outcome remains to be verified. These are identified in the help panel rather than silently presented as original rules.</div></section></main><dialog id="helpDialog" style="background:#09182b;color:#d5f4ff;border:1px solid #55f7ff;max-width:660px;max-height:80vh;overflow:auto;line-height:1.65"><h2 style="color:#ffc65b">PILOT'S FIELD MANUAL</h2><p>Plot up to 5 forward hex movements (3 for Swarm ships). Left/right orders first move one hex forward, then rotate one hex-side. Maximum 3 turns. Holding position uses no power if you do not fire.</p><p>Normal movement and/or firing costs 1 power point per active turn, not per action. Recharge takes a full stationary, non-firing turn and restores 5 power (maximum 20). The Gunstar and Deck Fighter have 20 starting power points.</p><p>Weapons: standard laser base 3/range 10; Swarm laser base 4; particle base 4/range 9; photon base 5/range 8. Add one to the base per additional hex of distance. Roll 2d6 ≥ target number. Stationary targets −1; asteroid shooter/target +1 each. Photon blasts affect the target hex and six neighboring hexes in open space.</p><p>For damage, roll a red die for table 1–6 and white die for result 1–6. Particle shifts the table +1 (maximum 6), Swarm laser and missiles −1 (minimum 1). Fuselage arcs cascade into engine and targeting, and every second fuselage arc also affects vector control and powered systems.</p><p><b>Prototype limitations:</b> Computer opposition uses an original heuristic rather than historical AI (the board game had no AI). Local two-player mode now requires each surviving ship on both sides to seal its own orders before resolution; conceal the screen when passing turns. Swarm deployment uses the rulebook’s two-wave spacing and facing, adapted to the digital map; exact printed hexes remain unverified. Use RUN DIAGNOSTICS to execute in-browser rules sanity checks; exceptional combinations remain under test. Death Blossom is a six-orientation weapon volley and consumes all power, but exact target allocation is automated.</p><button id="closeHelp">CLOSE</button></dialog>
+<script>
+(()=>{'use strict';const $=id=>document.getElementById(id),cv=$('map'),ctx=cv.getContext('2d');let W=0,H=0,scale=1,ox=0,oy=0,ships=[],rocks=new Set(),selected=null,turn=1,phase='plot',orders=[],ended=false,history=[],scenario='duel',mode='ai',asteroids='none',humanSide='star',hotIndex=0,playing=false,flash=null;const dirs=[[1,0],[0,1],[-1,1],[-1,0],[0,-1],[1,-1]],NQ=19,NR=13;let rngState=1,rngCalls=0,rngSeed=1;function seedRng(seed){rngSeed=(Number(seed)>>>0)||1;rngState=rngSeed;rngCalls=0}function gameRandom(){rngState=(Math.imul(1664525,rngState)+1013904223)>>>0;rngCalls++;return rngState/4294967296}const rnd=n=>1+Math.floor(gameRandom()*n),clamp=(x,a,b)=>Math.max(a,Math.min(b,x)),key=(q,r)=>q+','+r,inside=(q,r)=>q>=0&&r>=0&&q<NQ&&r<NR,dist=(a,b)=>Math.max(Math.abs(a.q-b.q),Math.abs(a.r-b.r),Math.abs((a.q+a.r)-(b.q+b.r)));const sleep=ms=>new Promise(ok=>setTimeout(ok,ms));let delay=420,inspected=null,showArcs=true;const rows=[['F1','F1','F1','E1','E1','P1'],['F2,W','F2,R','F2,S','E1,N','E1,H','P2'],['F3','F3','F3','E2','E2','P4'],['F4,W','F4,R','F4,S','E2,N','E2,H','P6'],['F5,W','F5,R','F5,S','E3,N','E3,H','P8'],['F1,X','F1,T','F1,L','E3,P10','K','D']];
+function make(id,type,team,q,r,d){return{id,type,team,q,r,d,power:20,hull:0,engine:0,aim:0,missiles:type==='swarm'?0:4,laserLoss:0,particleLost:false,missileLost:false,pilot:0,gunner:0,dead:false,life:0,restrict:null,nextRestrict:0,stabilizer:0,nextStabilizer:0,half:0,nextHalf:0,constant:null,nextConstant:0,lastMove:0,movePlan:[],arc:0,deckArcs:[0,0],recharge:false,blossom:false,fire:{laser:true,particle:true,missile:false},unconsciousPilot:0,unconsciousGunner:0, pendingDeath:false, asteroidChecks:0, asteroidImpacts:0, prevSpeed:0, pendingRestrictionRoll:0,deferredRestrict:0,deferredSpeedTurns:0,deferredSpeedTarget:null}}function engineArcs(s){return Math.max(Math.floor(s.engine/2),Math.floor(s.hull/4))}function targetArcs(s){return Math.max(engineArcs(s),s.aim)}function systemArcs(s){return Math.max(Math.floor(s.engine/4),Math.floor(s.hull/8))}function maxMove(s){return s.type==='swarm'?3:Math.max(0,5-engineArcs(s))}function maxTurns(s){return Math.max(0,3-systemArcs(s))}function targeting(s){return Math.min(4,targetArcs(s))}function powered(s){return Math.max(1,3-systemArcs(s))}function active(s){return !s.dead&&s.pilot<6}function log(t){history.unshift(`[T${String(turn).padStart(2,'0')}] ${t}`);$('log').innerHTML=history.slice(0,110).map(x=>'<div>'+x.replaceAll('&','&amp;').replaceAll('<','&lt;')+'</div>').join('')}
+function init(){if(playing)return;seedRng($('battleSeed').value);scenario=$('scenario').value;mode=$('mode').value;asteroids=$('asteroids').value;ships=[];rocks=new Set();turn=1;phase='plot';ended=false;hotIndex=0;humanSide='star';history=[];
+// Scenario geometry follows the printed relative placements; hex coordinates are adapted to this digital map.
+if(scenario==='duel'){
+ ships.push(make('GS-01','gunstar','star',2,6,0));ships.push(make('DF-01','deck','kodan',16,6,3));
+}else if(asteroids==='none'){
+ ships.push(make('GS-01','gunstar','star',5,6,0));
+ // Two touching seven-ship waves, separated by two hexes and heading away from the Gunstar.
+ for(let i=0;i<14;i++){let wave=Math.floor(i/7),r=3+i%7;ships.push(make('SW-'+String(i+1).padStart(2,'0'),'swarm','kodan',10+2*wave,r,0))}
+}else{
+ ships.push(make('GS-01','gunstar','star',0,6,0));
+ for(let i=0;i<14;i++){let wave=Math.floor(i/7),r=3+i%7;ships.push(make('SW-'+String(i+1).padStart(2,'0'),'swarm','kodan',16+2*wave,r,3))}
+}
+if(asteroids==='field')for(let i=0;i<22;i++){let q=5+Math.floor(gameRandom()*9),r=Math.floor(gameRandom()*NR);if(!ships.some(s=>s.q===q&&s.r===r))rocks.add(key(q,r))}
+selected=ships[0];inspected=null;orders=[];$('arc').value='0';$('laser').checked=true;$('particle').checked=true;$('missile').checked=false;log('MISSION INITIATED — v4.1: ASTEROID DAMAGE LIFECYCLE.');log('REPLAY SEED '+rngSeed+' — repeat with identical orders for identical results.');log(scenario==='swarm'?'SWARM: 14 SHIPS IN TWO WAVES; DESTROY ALL KO-DAN CONTACTS.':'DUEL: DESTROY, KILL PILOT, OR FORCE OPPONENT OFF MAP.');update()}
+function step(s,m){let [dq,dr]=dirs[s.d];s.q+=dq;s.r+=dr;if(m==='L')s.d=(s.d+5)%6;if(m==='R')s.d=(s.d+1)%6}function movementLimit(s){let n=maxMove(s);if(s.half>=3)n=0;else if(s.half===2)n=n>=3?1:0;else if(s.half===1)n=Math.ceil(n/2);if(s.constant!==null)n=Math.min(n,s.constant);return n}function validPlan(s,p){if(p.some(x=>!['F','L','R'].includes(x)))return false;if(p.length>movementLimit(s))return false;if(s.constant!==null&&p.length!==Math.min(s.constant,movementLimit(s)))return false;if(!s.stabilizer&&s.pilot<6&&s.unconsciousPilot===0&&p.filter(x=>x!=='F').length>maxTurns(s)&&!s.restrict?.startsWith('lock')&&s.constant===null)return false;if(s.restrict){if(s.restrict==='noL'&&p.includes('L')||s.restrict==='noR'&&p.includes('R'))return false;if(s.restrict.startsWith('lock')&&p.some(x=>x!==({lockL:'L',lockR:'R',lockF:'F'}[s.restrict])))return false}return true}
+function add(m){inspected=null;if(selected)selected.recharge=false;if(ended||playing||phase!=='plot'||!selected||selected.team!==humanSide)return;if(m==='H'){orders=[];update();return}let next=orders.concat(m);if(validPlan(selected,next)){orders=next;update()}else log('MOVEMENT ORDER VIOLATES DAMAGE / VECTOR LIMIT.')}function predict(s,plan){let a={q:s.q,r:s.r,d:s.d};for(let m of plan)step(a,m);return a}function nearest(s){return ships.filter(t=>!t.dead&&t.team!==s.team).sort((a,b)=>dist(s,a)-dist(s,b))[0]}
+function aiPlan(s){if(s.power<=0||s.unconsciousPilot===1||s.recharge)return[];let target=nearest(s);if(!target)return[];let best=[],score=-Infinity,lim=movementLimit(s);for(let k=0;k<180;k++){let p=[],n=s.constant!==null?Math.min(s.constant,lim):Math.floor(gameRandom()*(lim+1));for(let i=0;i<n;i++)p.push(['F','F','F','L','R'][Math.floor(gameRandom()*5)]);if(s.restrict?.startsWith('lock'))p=p.map(()=>({lockL:'L',lockR:'R',lockF:'F'}[s.restrict]));if(!validPlan(s,p))continue;let a=predict(s,p);if(!inside(a.q,a.r))continue;let dd=dist(a,target),face=dirs[a.d],v=[target.q-a.q,target.r-a.r],align=face[0]*v[0]+face[1]*v[1];let z=-Math.abs(dd-3)*2+align*.8+gameRandom()*1.5;if(z>score){score=z;best=p}}return best}
+function damage(s,kind,collisionSpeed){if(s.dead)return;let before={hull:s.hull,engine:s.engine,power:s.power,aim:s.aim,pilot:s.pilot,gunner:s.gunner,missiles:s.missiles,laserLoss:s.laserLoss,particleLost:s.particleLost,missileLost:s.missileLost};let red=collisionSpeed?collisionSpeed:rnd(6),white=rnd(6),tab=collisionSpeed||clamp(red+(kind==='particle'?1:kind==='swarm'||kind==='missile'?-1:0),1,6),code=rows[tab-1][white-1];log(`${s.id} DAMAGE: ${collisionSpeed?'COLLISION SPEED '+collisionSpeed:'RED '+red}, WHITE ${white} → TABLE ${tab} / ${code}`);if(s.type==='swarm'){s.dead=true;log(s.id+' DESTROYED (ONE HIT).');return}for(let part of code.split(',')){let c=part[0],n=Number(part.slice(1))||1;if(c==='F')s.hull+=n;if(c==='E')s.engine+=n;if(c==='P'){s.power=Math.max(0,s.power-n);s.powerPlantHitThisTurn=true;}if(c==='T')s.aim++;if(c==='R')s.nextRestrict++;if(c==='S')s.nextStabilizer++;if(c==='N')s.nextConstant++;if(c==='H')s.nextHalf++;if(c==='W'){if(s.type==='gunstar'&&rnd(6)>3)s.gunner++;else s.pilot++}if(c==='L'){if(!s.life)s.life=6;else log(s.id+' REPEATED LIFE SUPPORT HIT — NO ADDITIONAL EFFECT.')};if(c==='X'){let z=rnd(6),maxLasers=s.type==='gunstar'?2:3;if(z<=2){if(s.laserLoss>=maxLasers)log(s.id+' ALREADY DESTROYED LASER — NO ADDITIONAL EFFECT.');else s.laserLoss++}else if(z<=4){if(s.particleLost)log(s.id+' ALREADY DESTROYED PARTICLE CANNON — NO ADDITIONAL EFFECT.');else s.particleLost=true}else{if(s.missileLost)log(s.id+' ALREADY DESTROYED MISSILE RACK — NO ADDITIONAL EFFECT.');else s.missileLost=true}log(s.id+' WEAPON DESTRUCTION DIE '+z+' → '+(z<=2?'LASER TURRET':z<=4?'PARTICLE CANNON':'MISSILE RACK'))}if(c==='K'){if(s.type==='gunstar'&&rnd(6)>3)s.gunner=6;else s.pilot=6}if(c==='D')s.dead=true}if(s.hull>=20||s.engine>=10){s.dead=true;log(s.id+' CRITICAL STRUCTURAL FAILURE — STARFIGHTER EXPLODES.')}if(s.hull!==before.hull)log(s.id+' FUSELAGE +'+(s.hull-before.hull)+' → '+s.hull+'/20; mobility '+movementLimit(s)+' hexes; targeting +'+targeting(s)+'.');if(s.engine!==before.engine)log(s.id+' ENGINE +'+(s.engine-before.engine)+' → '+s.engine+'/10; max movement '+movementLimit(s)+' hexes.');if(s.power!==before.power)log(s.id+' POWER '+before.power+' → '+s.power+'; '+(s.power===0?'SHIP DISABLED UNTIL RECHARGE.':'power plant damage recorded.'));if(s.aim!==before.aim)log(s.id+' TARGETING COMPUTER DAMAGED: attack penalty now +'+targeting(s)+'.');if(s.nextRestrict)log(s.id+' STEERING RESTRICTION pending for next turn.');if(s.nextStabilizer)log(s.id+' STABILIZER DAMAGED: next turn heading randomized.');if(s.nextHalf)log(s.id+' HALF SPEED restriction pending: '+s.nextHalf+' hit(s), repeated ceiling-halving.');if(s.nextConstant)log(s.id+' NO SPEED CHANGE restriction pending.');if(s.pilot!==before.pilot||s.gunner!==before.gunner)log(s.id+' CREW HIT: pilot '+s.pilot+'/6; gunner '+s.gunner+'/6.');crewHitConsciousness(s,'pilot',before.pilot);if(s.type==='gunstar')crewHitConsciousness(s,'gunner',before.gunner);if(s.life)log(s.id+' LIFE SUPPORT DAMAGED: countdown '+s.life+'.');if(s.laserLoss!==before.laserLoss||s.particleLost!==before.particleLost||s.missileLost!==before.missileLost)log(s.id+' WEAPON DESTROYED: lasers lost '+s.laserLoss+'; particle '+(s.particleLost?'OFFLINE':'OK')+'; missiles '+(s.missileLost?'OFFLINE':'OK')+'.');if(s.hull>=20||s.engine>=10)s.dead=true;if(s.dead)log(s.id+' EXPLODES / REMOVED FROM ACTIVE PLAY.');if(s.pilot>=6&&!s.dead){s.pilotKilled=true;s.killedSpeed=s.lastMove;log(s.id+' PILOT KILLED — CRAFT CONTINUES AT PREVIOUS SPEED WITH RANDOM STABILIZER; GUNNER MAY STILL FIRE.');}update()}
+function crewThreshold(hits){return hits===3?8:hits===4?10:hits>=5?12:0}
+function crewHitConsciousness(s,role,previousHits){let hits=s[role],field=role==='pilot'?'unconsciousPilot':'unconsciousGunner';if(hits>=6){s[field]=0;return}if(hits<=2||hits<=previousHits)return;let needed=crewThreshold(hits),roll=rnd(6)+rnd(6);if(roll<needed){s[field]=2;log(s.id+' '+role.toUpperCase()+' INJURY CHECK '+roll+' < '+needed+' — UNCONSCIOUS FOR NEXT GAME TURN.')}else{log(s.id+' '+role.toUpperCase()+' INJURY CHECK '+roll+' ≥ '+needed+' — REMAINS CONSCIOUS.')}}
+function recoverCrew(s,role){let field=role==='pilot'?'unconsciousPilot':'unconsciousGunner',state=s[field];if(!state||s[role]>=6)return;if(state===2){s[field]=1;log(s.id+' '+role.toUpperCase()+' REMAINS UNCONSCIOUS NEXT TURN; RECOVERY CHECK AFTER THAT TURN.');return}let needed=crewThreshold(s[role]),roll=rnd(6)+rnd(6);if(roll>=needed){s[field]=0;log(s.id+' '+role.toUpperCase()+' REGAINS CONSCIOUSNESS ('+roll+' ≥ '+needed+').')}else log(s.id+' '+role.toUpperCase()+' STILL UNCONSCIOUS ('+roll+' < '+needed+').')}
+function chooseRestriction(){let d=rnd(6);while(d===6)d=rnd(6);return ['lockL','lockF','lockR','noL','noR'][d-1]}function prepareTemporary(s){s.stabilizer=s.nextStabilizer?1:0;if(s.stabilizer){s.restrict=null;s.deferredRestrict=0;if(s.nextRestrict)log(s.id+' STEERING RESTRICTION IGNORED: SIMULTANEOUS STABILIZER DAMAGE TAKES PRECEDENCE (FASA DAMAGE CONFLICT RULE).');}else{s.restrict=s.nextRestrict?chooseRestriction():null;s.deferredRestrict=0;}// Printed conflict rule: No Speed Change is postponed one turn, while Half Speed applies for TWO turns.
+// Preserve the speed at the time of damage; do not replace it with the intervening half-speed move.
+let newSpeedLock=s.nextConstant>0, newHalf=s.nextHalf;
+s.constant=null;
+if(newSpeedLock&&newHalf){
+ s.deferredSpeedTarget=s.lastMove;
+ s.deferredSpeedTurns=2;
+ s.deferredConstant=true;
+ log(s.id+' SPEED CONFLICT: NO SPEED CHANGE POSTPONED; HALF SPEED APPLIES FOR TWO TURNS, THEN ORIGINAL SPEED '+s.deferredSpeedTarget+' REQUIRED (subject to maximum).');
+}else if(newSpeedLock){
+ s.constant=s.lastMove;
+ s.deferredConstant=false;s.deferredSpeedTurns=0;s.deferredSpeedTarget=null;
+}
+if(s.deferredSpeedTurns>0){
+ s.half=Math.max(1,newHalf);
+ s.deferredSpeedTurns--;
+ s.deferredConstant=true;
+ log(s.id+' CONFLICT HALF SPEED: '+(s.deferredSpeedTurns+1)+'/2 RESTRICTED TURNS; '+s.deferredSpeedTurns+' REMAIN.');
+}else{
+ s.half=newHalf;
+ if(s.deferredConstant&&s.deferredSpeedTarget!==null){
+  s.constant=s.deferredSpeedTarget;
+  s.deferredConstant=false;
+  s.deferredSpeedTarget=null;
+  log(s.id+' POSTPONED NO SPEED CHANGE NOW ACTIVE: '+s.constant+' HEXES (or maximum possible).');
+ }
+}
+s.nextRestrict=0;s.nextStabilizer=0;s.nextConstant=0;s.nextHalf=0;if(s.restrict)log(s.id+' STEERING RESTRICTION ACTIVE: '+s.restrict);if(s.stabilizer)log(s.id+' STABILIZER DAMAGED: each move uses 1d6 (1–2 left, 3–4 straight, 5–6 right).');if(s.half)log(s.id+' HALF-SPEED HITS: '+s.half);if(s.constant!==null)log(s.id+' NO SPEED CHANGE: target '+s.constant+' hexes.')} 
+function asteroidCollision(a,b){return a+b<6}
+function asteroidDamageTable(s){return clamp(s.movePlan.length,1,5)}
+function asteroidCheckMessage(id,a,b){return id+' ASTEROID MANOEUVRE: 2D6 ('+a+'+'+b+'='+(a+b)+') vs 6 required → '+(asteroidCollision(a,b)?'FAILED — COLLISION':'PASSED — CLEAR')}
+function applyMovement(s,m){if(s.stabilizer||s.pilot>=6){let z=rnd(6);m=z<=2?'L':z<=4?'F':'R';log(s.id+' STABILIZER DIE '+z+' → '+m)}step(s,m);if(!inside(s.q,s.r)){s.dead=true;log(s.id+' LEFT THE STARFIELD — LOST.');return}log(s.id+' → HEX '+s.q+','+s.r+' / HEADING '+s.d);if(rocks.has(key(s.q,s.r))){let a=rnd(6),b=rnd(6);s.asteroidChecks=(s.asteroidChecks||0)+1;log(asteroidCheckMessage(s.id,a,b));if(asteroidCollision(a,b)){s.asteroidImpacts=(s.asteroidImpacts||0)+1;log(s.id+' ASTEROID COLLISION #'+s.asteroidImpacts+' / CHECK #'+s.asteroidChecks);let table=asteroidDamageTable(s);log(s.id+' ASTEROID IMPACT: '+s.movePlan.length+' PLOTTED MOVEMENTS THIS TURN → DAMAGE TABLE '+table+'; EACH COLLISION USES THIS SAME TABLE.');damage(s,'collision',table)}}}
+// Hex fire sectors: nearest of six radial directions, with 3 adjacent spokes per arc.
+function sector(s,t){let v={q:t.q-s.q,r:t.r-s.r},d=dist(s,t);if(!d)return 0;let best=0,bestErr=Infinity;for(let j=0;j<6;j++){let u=dirs[j],cross=Math.abs(u[0]*v.r-u[1]*v.q),dot=u[0]*v.q+u[1]*v.r,err=cross/(Math.max(.001,dot));if(dot>0&&err<bestErr){bestErr=err;best=j}}return(best-s.d+6)%6}function inArc(s,t,arc){let a=sector(s,t);return ({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[arc]?.includes(a)===true}// Hex-line interpolation uses cube coordinates. Ties inspect both adjacent hexes
+// conservatively so a boundary-skimming shot cannot pass through a rock.
+function cubeRound(x,y,z){let rx=Math.round(x),ry=Math.round(y),rz=Math.round(z),dx=Math.abs(rx-x),dy=Math.abs(ry-y),dz=Math.abs(rz-z);if(dx>dy&&dx>dz)rx=-ry-rz;else if(dy>dz)ry=-rx-rz;else rz=-rx-ry;return {q:rx,r:rz}}
+function hexLine(a,b){let n=dist(a,b),out=[];if(n<2)return out;for(let i=1;i<n;i++){let t=i/n,x=a.q+(b.q-a.q)*t,z=a.r+(b.r-a.r)*t,y=-x-z;let h=cubeRound(x+1e-7,y+1e-7,z-2e-7);out.push(h)}return out}
+function blocked(s,t){return hexLine(s,t).some(h=>rocks.has(key(h.q,h.r)))}function targetFor(s,arc,range){return ships.filter(t=>!t.dead&&t.team!==s.team&&dist(s,t)<=range&&inArc(s,t,arc)&&!blocked(s,t)&&!(rocks.has(key(s.q,s.r))&&rocks.has(key(t.q,t.r)))).sort((a,b)=>dist(s,a)-dist(s,b))[0]}
+async function shot(s,kind,arc){let range=kind==='laser'?10:kind==='particle'?9:8,t=targetFor(s,arc,range);if(!t){log(s.id+' '+kind.toUpperCase()+' — NO VALID TARGET');await sleep(delay*.6);return false}let d=Math.max(1,dist(s,t)),base=kind==='laser'?(s.type==='swarm'?4:3):kind==='particle'?4:5,toHit=base+d-1+targeting(s)+(t.lastMove===0?-1:0)+(rocks.has(key(s.q,s.r))?1:0)+(rocks.has(key(t.q,t.r))?1:0),a=rnd(6),b=rnd(6),hit=a+b>=toHit;flash={from:s,to:t,kind};log(`${s.id} ${kind.toUpperCase()} → ${t.id}: range ${d}, base ${base}, targeting +${targeting(s)}, stationary ${t.lastMove===0?'-1':'0'}, asteroids +${Number(rocks.has(key(s.q,s.r)))+Number(rocks.has(key(t.q,t.r)))}; 2d6 ${a}+${b}=${a+b} vs ${toHit} — ${hit?'HIT':'MISS'}`);draw();await sleep(delay);flash=null;if(hit){if(kind==='missile'){let victims=ships.filter(v=>!v.dead&&dist(v,t)<=1);if(rocks.has(key(t.q,t.r)))victims=victims.filter(v=>v.q===t.q&&v.r===t.r);for(let v of victims){damage(v,'missile');draw();await sleep(delay*.65)}if(rocks.has(key(t.q,t.r)))rocks.delete(key(t.q,t.r))}else damage(t,s.type==='swarm'?'swarm':kind)}draw();await sleep(delay*.55);return true}
+async function volley(s,blossom=false){if(s.dead||(s.power<=0&&!s.spentPowerThisTurn&&!blossom)||s.unconsciousGunner===1||s.type==='deck'&&s.unconsciousPilot===1)return;let f=s.fire,cap=powered(s),used=0;if(f.laser&&used<cap){let n=(s.type==='gunstar'?2:s.type==='deck'?3:1)-s.laserLoss;for(let i=0;i<n;i++){let arc=s.type==='gunstar'?s.arc:s.type==='deck'?[s.deckArcs[0],s.deckArcs[1],3][i]:0;await shot(s,'laser',arc)}used++}if(f.particle&&s.type!=='swarm'&&!s.particleLost&&used<cap){await shot(s,'particle',0);used++}if(f.missile&&s.type!=='swarm'&&!s.missileLost&&s.missiles>0&&used<cap){if(await shot(s,'missile',0)){s.missiles--;log(s.id+' PHOTON MISSILE EXPENDED — '+s.missiles+' REMAINING.')}else log(s.id+' PHOTON MISSILE HELD — NO VALID TARGET.');used++}}
+function victory(){
+ const star=ships.filter(s=>s.team==='star'),kodan=ships.filter(s=>s.team==='kodan');
+ const effective=s=>!s.dead&&s.pilot<6;
+ const starActive=star.some(effective),enemyActive=kodan.some(effective);
+ if(starActive&&enemyActive)return false;
+ ended=true;phase='end';
+ let winner=starActive?'STAR LEAGUE':enemyActive?'KO-DAN':'DRAW — BOTH SIDES ELIMINATED';
+ let reason=starActive?'ALL OPPOSING SHIPS ELIMINATED':enemyActive?'GUNSTAR DESTROYED, PILOT KILLED, OR LEFT MAP':'SIMULTANEOUS LOSSES';
+ log('MISSION COMPLETE — '+winner+' / '+reason);return true;
+}
+async function execute(){if(ended||playing||phase!=='plot')return;let controlled=selected;if(!controlled||controlled.team!==humanSide||(mode==='hotseat'&&controlled.ordersSealed))return;if(mode==='hotseat'){
+ controlled.movePlan=orders.slice();controlled.arc=Number($('arc').value);controlled.fire=readFire();controlled.ordersSealed=true;
+ const remaining=ships.find(x=>!x.dead&&x.team===humanSide&&!x.ordersSealed);
+ if(remaining){selected=remaining;orders=[];$('arc').value='0';$('laser').checked=true;$('particle').checked=remaining.type!=='swarm';$('missile').checked=false;log(controlled.id+' ORDERS SEALED — NEXT '+humanSide.toUpperCase()+' SHIP: '+remaining.id);update();return}
+ if(humanSide==='star'){humanSide='kodan';hotIndex=1;selected=ships.find(x=>!x.dead&&x.team==='kodan');orders=[];$('arc').value='0';$('laser').checked=true;$('particle').checked=selected?.type!=='swarm';$('missile').checked=false;log('STAR LEAGUE ORDERS SEALED — PASS DEVICE TO KO-DAN COMMANDER.');update();return}
+ hotIndex=2;
+ }inspected=null;playing=true;phase='movement';for(let s of ships.filter(s=>!s.dead)){let human=mode==='hotseat'?s.ordersSealed===true:s.team==='star';if(!human){s.movePlan=mode==='hotseat'?[]:aiPlan(s);s.fire=mode==='hotseat'?{laser:false,particle:false,missile:false}:{laser:true,particle:true,missile:s.missiles>0&&nearest(s)!==null&&dist(s,nearest(s))<=4};s.arc=0;s.deckArcs=[0,0]}else if(mode==='ai'&&s.team==='star'){s.movePlan=orders.slice();s.arc=Number($('arc').value);s.fire=readFire()}if(s.power===0&&s.pilot<6)s.recharge=true;if(s.recharge||s.unconsciousPilot===1){s.movePlan=[];s.fire={laser:false,particle:false,missile:false}}if(s.pilot>=6){s.recharge=false;s.movePlan=Array(Math.min(maxMove(s),s.killedSpeed??s.lastMove)).fill('F');s.fire={laser:s.type==='gunstar'&&s.gunner<6,particle:s.type==='gunstar'&&s.gunner<6,missile:false}}if(!validPlan(s,s.movePlan)){s.movePlan=s.movePlan.slice(0,movementLimit(s));while(s.movePlan.length&& !validPlan(s,s.movePlan))s.movePlan.pop()}s.lastMove=s.movePlan.length;s.spentPowerThisTurn=false;if(s.blossom){s.blossomEligible=s.type==='gunstar'&&scenario==='swarm'&&s.power>=4&&s.power<=10&&!s.recharge;if(!s.blossomEligible){log(s.id+' DEATH BLOSSOM ABORTED — AUXILIARY POWER REQUIREMENT NOT MET.');s.blossom=false;}}if(!s.recharge&&!s.blossom&&s.power>0&&(s.movePlan.length||Object.values(s.fire).some(Boolean))){s.power--;s.spentPowerThisTurn=true;}}
+log('MOVEMENT PHASE — SHIPS ADVANCE INDIVIDUALLY.');update();let movers=ships.filter(s=>!s.dead).sort((a,b)=>Number(a.stabilizer>0)-Number(b.stabilizer>0)||Number(a.type!=='swarm')-Number(b.type!=='swarm')||a.id.localeCompare(b.id));for(let s of movers){if(s.dead)continue;selected=s;for(let m of s.movePlan){applyMovement(s,m);update();await sleep(delay);if(s.dead)break}}phase='fire';log('FIRING PHASE — SWARM FIRST, THEN STARFIGHTERS.');for(let s of ships.filter(s=>!s.dead).sort((a,b)=>Number(a.type!=='swarm')-Number(b.type!=='swarm')||a.id.localeCompare(b.id))){if(s.dead)continue;selected=s;log('FIRE CONTROL: '+s.id);update();await sleep(delay*.7);if(s.blossom&&s.type==='gunstar'&&scenario==='swarm'&&s.blossomEligible){let original=s.d;for(let i=0;i<6;i++){s.d=(s.d+1)%6;log('DEATH BLOSSOM ROTATION '+(i+1)+'/6');s.fire={laser:true,particle:true,missile:s.missiles>0};await volley(s,true);update();await sleep(delay)}s.d=original;s.power=0;s.spentPowerThisTurn=true;s.blossom=false;log(s.id+' DEATH BLOSSOM — ALL POWER EXPENDED; NEXT TURN MUST RECHARGE.')}else if(!s.recharge)await volley(s)}phase='endturn';for(let s of ships.filter(s=>!s.dead)){if(s.recharge){if(s.powerPlantHitThisTurn)log(s.id+' RECHARGE INTERRUPTED BY POWER PLANT HIT.');else{s.power=Math.min(20,s.power+5);log(s.id+' RECHARGED +5 POWER.')}s.recharge=false}if(s.life){s.life--;log(s.id+' LIFE SUPPORT: '+s.life+' TURN(S) REMAIN TO EXIT MAP.');if(s.life===0){s.pilot=6;log(s.id+' LIFE SUPPORT EXPIRED — PILOT KILLED.')}}for(let role of (s.type==='gunstar'?['pilot','gunner']:['pilot']))recoverCrew(s,role);prepareTemporary(s);s.powerPlantHitThisTurn=false;s.movePlan=[];s.ordersSealed=false;s.fire={laser:true,particle:true,missile:false}}victory();if(!ended){turn++;phase='plot';log('NEW TURN — ENTER VECTOR ORDERS.')}humanSide='star';hotIndex=0;selected=ships.find(s=>!s.dead&&s.team==='star')||ships.find(s=>!s.dead);orders=[];playing=false;update()}
+function readFire(){return{laser:$('laser').checked,particle:$('particle').checked,missile:$('missile').checked}}function recharge(){if(playing||!selected||selected.team!==humanSide)return;selected.recharge=true;selected.blossom=false;orders=[];$('laser').checked=false;$('particle').checked=false;$('missile').checked=false;log(selected.id+' RECHARGE ORDER QUEUED.');update()}function blossom(){if(playing||selected?.team!==humanSide||scenario!=='swarm'||selected?.type!=='gunstar'||(selected.power<4||selected.power>10)){log('DEATH BLOSSOM REQUIRES AT LEAST FOUR AUXILIARY POWER POINTS (TOTAL POWER 4–10).');return}selected.blossom=true;log('DEATH BLOSSOM ARMED.');update()}
+function telemetryLine(label,value,severity=''){return '<div class="telemetry-line '+severity+'"><span>'+label+'</span><span>'+value+'</span></div>'}
+function renderTelemetry(s){
+ const restrictNames={lockL:'FORCED LEFT EACH HEX',lockR:'FORCED RIGHT EACH HEX',lockF:'STRAIGHT ONLY',noL:'NO LEFT TURNS',noR:'NO RIGHT TURNS'};
+ const random=!!s.stabilizer||s.pilot>=6;
+ const steering=random?'RANDOM MANOEUVRE':s.restrict?restrictNames[s.restrict]||s.restrict:'NORMAL';
+ const steerSeverity=s.restrict||random?'critical':'ok';
+ const turnAllowance=s.pilot>=6?'PILOT DEAD · RANDOM VECTOR':s.stabilizer?'RANDOM DIRECTION PER HEX':maxTurns(s)+' TURN(S) MAX';
+ const future=[];
+ if(s.nextRestrict)future.push('STEERING RESTRICTION');
+ if(s.nextStabilizer)future.push('RANDOM MANOEUVRE');
+ if(s.nextHalf)future.push('HALF SPEED ×'+s.nextHalf);
+ if(s.nextConstant)future.push('NO SPEED CHANGE');
+ if(s.deferredConstant)future.push('DEFERRED NO SPEED CHANGE'+(s.deferredSpeedTarget!==null?' · '+s.deferredSpeedTarget+' HEX':'')+' · '+s.deferredSpeedTurns+' HALF-SPEED TURN(S) LEFT');
+ 
+ const laserTotal=s.type==='gunstar'?2:s.type==='deck'?3:1;
+ const laserLeft=Math.max(0,laserTotal-s.laserLoss);
+ const crewState=(role)=>{let hits=s[role],u=s[role==='pilot'?'unconsciousPilot':'unconsciousGunner'];return hits>=6?'KILLED':u===2?'UNCONSCIOUS · MUST MISS TURN':u===1?'UNCONSCIOUS · RECOVERY CHECK':hits>0?'WOUNDED ('+hits+'/6)':'FIT'};
+ $('flightDetail').innerHTML=[
+ telemetryLine('HEADING',s.d+' / 6 · HEX '+s.q+','+s.r),
+ telemetryLine('STEERING',steering,steerSeverity),
+ telemetryLine('TURN CONTROL',turnAllowance,s.stabilizer||s.pilot>=6?'warning':''),
+ telemetryLine('SPEED',movementLimit(s)+' HEX/TURN'+(s.half?' · HALF SPEED ×'+s.half:''),s.half?'warning':''),
+ telemetryLine('SPEED LOCK',s.constant!==null?'MUST MOVE '+s.constant+' HEX':'NONE',s.constant!==null?'warning':'ok'),
+ telemetryLine('ENGINE DAMAGE',s.engine+' / 10'+(engineArcs(s)?' · '+engineArcs(s)+' MOBILITY ARC(S)':''),s.engine?'warning':'ok'),
+ telemetryLine('VECTOR SYSTEMS',systemArcs(s)+' ARC(S) LOST',systemArcs(s)?'warning':'ok'),
+ telemetryLine('STABILIZER',s.stabilizer?'DAMAGED · RANDOM 1D6':'OPERATIONAL',s.stabilizer?'critical':'ok')
+ ].join('');
+ $('weaponDetail').innerHTML=[
+ telemetryLine('LASER MOUNTS',laserLeft+' / '+laserTotal+' OPERATIONAL',laserLeft<laserTotal?'critical':'ok'),
+ telemetryLine('PARTICLE CANNON',s.type==='swarm'?'NOT FITTED':s.particleLost?'DESTROYED':'OPERATIONAL',s.particleLost?'critical':'ok'),
+ telemetryLine('MISSILE RACK',s.type==='swarm'?'NOT FITTED':s.missileLost?'DESTROYED':'OPERATIONAL',s.missileLost?'critical':'ok'),
+ telemetryLine('PHOTON AMMO',s.type==='swarm'?'—':s.missiles+' REMAINING',s.type!=='swarm'&&!s.missiles?'warning':''),
+ telemetryLine('FIRE CHANNELS',powered(s)+' AVAILABLE / 3',powered(s)<3?'warning':'ok'),
+ telemetryLine('TARGETING',targeting(s)?'+'+targeting(s)+' TO ATTACK ROLL':'NOMINAL',targeting(s)?'warning':'ok'),
+ telemetryLine('FIRE STATUS',s.dead?'SHIP DESTROYED':s.type==='gunstar'&&s.gunner>=6?'GUNNER KILLED':s.unconsciousGunner===1?'GUNNER UNCONSCIOUS':s.power<=0?'NO POWER':'READY',s.dead||s.power<=0?'critical':'')
+ ].join('');
+ $('survivalDetail').innerHTML=[
+ telemetryLine('PILOT',crewState('pilot'),s.pilot>=6?'critical':s.pilot||s.unconsciousPilot?'warning':'ok'),
+ ...(s.type==='gunstar'?[telemetryLine('GUNNER',crewState('gunner'),s.gunner>=6?'critical':s.gunner||s.unconsciousGunner?'warning':'ok')]:[]),
+ telemetryLine('LIFE SUPPORT',s.life?'FAILURE · '+s.life+' TURN(S) LEFT':'OPERATIONAL',s.life?'critical':'ok'),
+ telemetryLine('NEXT-TURN DAMAGE',future.length?future.join(' / '):'NONE',future.length?'warning':'ok'),
+ telemetryLine('ASTEROID CHECKS', (s.asteroidChecks||0)+' CHECKS / '+(s.asteroidImpacts||0)+' COLLISIONS',(s.asteroidImpacts||0)?'warning':'ok'),
+ telemetryLine('HULL STATUS',s.dead?'DESTROYED':s.hull?'DAMAGED · '+s.hull+'/20':'INTACT',s.dead?'critical':s.hull?'warning':'ok')
+ ].join('');
+}
+function update(){let s=inspected||selected;if(!s)return;$('turn').textContent=String(turn).padStart(2,'0');$('phase').textContent=ended?'GAME OVER':phase.toUpperCase();$('status').textContent=playing?'TACTICAL PLAYBACK — ORDERS LOCKED':mode==='hotseat'&&humanSide==='kodan'?'KO-DAN: SEAL ORDERS FOR EACH SHIP':'STAR LEAGUE: PLOT VECTOR & FIRE';$('shipName').textContent=s.id+' / '+s.type.toUpperCase()+(inspected?' [INSPECT]':'');$('shipFaction').textContent=s.team==='star'?'STAR LEAGUE':'KO-DAN';$('powerText').textContent=s.power+' / 20';$('powerBar').style.width=(s.power/20*100)+'%';$('hullText').textContent=s.hull+' / 20';$('hullBar').style.width=(clamp(s.hull,0,20)/20*100)+'%';$('mobility').textContent=movementLimit(s)+' / '+maxTurns(s);$('targetPenalty').textContent='+'+targeting(s);$('systems').textContent=powered(s);$('missiles').textContent=s.missiles;$('crew').textContent=s.pilot+(s.type==='gunstar'?' / '+s.gunner:' / —');renderTelemetry(s);$('moves').innerHTML=(orders.length?orders:['— HOLD —']).map((x,i)=>'<span class="move">'+(orders.length?i+1+': ':'')+({F:'↑',L:'↖',R:'↗'}[x]||x)+'</span>').join('');$('blossom').disabled=playing||scenario!=='swarm';$('arc').disabled=playing||selected?.type!=='gunstar';$('particle').disabled=playing||selected?.type==='swarm';$('missile').disabled=playing||selected?.type==='swarm';$('execute').disabled=playing||ended||!selected||selected.team!==humanSide||(mode==='hotseat'&&selected.ordersSealed);$('mapHud').textContent='SECTOR 01 · TURN '+String(turn).padStart(2,'0')+' · '+ships.filter(s=>!s.dead).length+' CONTACTS';draw()}
+function geometry(){let base=Math.min((W-36)/(Math.sqrt(3)*(NQ+NR/2)),(H-32)/(1.5*NR+.5));return Math.max(8,base)*scale}function xy(q,r){let z=geometry();return{x:W/2+(Math.sqrt(3)*(q+r/2)-Math.sqrt(3)*(NQ/2+NR/4))*z+ox,y:H/2+(1.5*r-1.5*(NR-1)/2)*z+oy}}function hex(x,y,z,fill,stroke,width=1){ctx.beginPath();for(let i=0;i<6;i++){let a=Math.PI/3*i+Math.PI/6,px=x+z*Math.cos(a),py=y+z*Math.sin(a);i?ctx.lineTo(px,py):ctx.moveTo(px,py)}ctx.closePath();ctx.fillStyle=fill;ctx.fill();ctx.lineWidth=width;ctx.strokeStyle=stroke;ctx.stroke()}function draw(){if(!W)return;ctx.clearRect(0,0,W,H);ctx.fillStyle='#050c1a';ctx.fillRect(0,0,W,H);let z=geometry();for(let r=0;r<NR;r++)for(let q=0;q<NQ;q++){let p=xy(q,r),rock=rocks.has(key(q,r));hex(p.x,p.y,z*.97,rock?'#46311e':'#08192a',rock?'#9b7144':'#1b3950',.7)}if(!playing&&selected&&selected.team===humanSide){let a=predict(selected,orders);if(inside(a.q,a.r)){let p=xy(a.q,a.r);hex(p.x,p.y,z*.9,'#194f4d77','#6bf9db',2)}}if(showArcs&&selected&&!selected.dead&&(!playing?selected.team===humanSide:true)){let origin=playing?selected:predict(selected,orders);let arc=selected.type==='gunstar'?(playing?selected.arc:Number($('arc').value)):0;let ranges=[{arc,range:10,color:'rgba(65,242,255,.17)'},...(selected.type==='swarm'?[]:[{arc:0,range:9,color:'rgba(255,198,91,.11)'}])];for(let r=0;r<NR;r++)for(let q=0;q<NQ;q++){let h={q,r},d=dist(origin,h);if(!d)continue;for(let layer of ranges){if(d<=layer.range&&inArc(origin,h,layer.arc)){let pos=xy(q,r);hex(pos.x,pos.y,z*.88,layer.color,'rgba(96,211,225,.09)',.4)}}}}for(let s of ships.filter(s=>!s.dead)){let p=xy(s.q,s.r),c=s.team==='star'?'#52f5ff':'#ff667d';ctx.save();ctx.translate(p.x,p.y);ctx.rotate(s.d*Math.PI/3);ctx.shadowColor=c;ctx.shadowBlur=13;ctx.beginPath();ctx.moveTo(z*.68,0);ctx.lineTo(-z*.43,-z*.43);ctx.lineTo(-z*.22,0);ctx.lineTo(-z*.43,z*.43);ctx.closePath();ctx.fillStyle=s.team==='star'?'#1a768c':'#922b4c';ctx.fill();ctx.strokeStyle=c;ctx.lineWidth=s===selected||s===inspected?3:1.3;ctx.stroke();ctx.restore();ctx.font=`${Math.max(9,z*.42)}px monospace`;ctx.fillStyle=c;ctx.textAlign='center';ctx.fillText(s.id,p.x,p.y-z*.78)}if(flash){let a=xy(flash.from.q,flash.from.r),b=xy(flash.to.q,flash.to.r);ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.strokeStyle=flash.kind==='laser'?'#00ffff':flash.kind==='particle'?'#ffca4e':'#ff5b78';ctx.shadowColor=ctx.strokeStyle;ctx.shadowBlur=25;ctx.lineWidth=4;ctx.stroke();ctx.shadowBlur=0}ctx.textAlign='left'}function resize(){let rect=cv.getBoundingClientRect(),dpr=window.devicePixelRatio||1;W=rect.width;H=rect.height;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);draw()}
+
+function runDiagnostics(){
+ const asteroidChecks=[ [1,1,true],[2,3,true],[1,4,true],[3,3,false],[4,5,false],[6,6,false] ];
+
+ const tests=[];const check=(name,fn)=>{try{if(!fn())throw Error('assertion failed');tests.push(['PASS',name])}catch(e){tests.push(['FAIL',name+': '+e.message])}};
+
+ check('Asteroid manoeuvre: all boundary and representative 2D6 totals',()=>asteroidChecks.every(([a,b,collision])=>asteroidCollision(a,b)===collision));
+ check('Asteroid transmission: failure includes both dice, total and target',()=>asteroidCheckMessage('GS-01',2,3).includes('2D6 (2+3=5) vs 6 required → FAILED — COLLISION'));
+ check('Asteroid transmission: success at exact threshold',()=>asteroidCheckMessage('GS-01',3,3).includes('2D6 (3+3=6) vs 6 required → PASSED — CLEAR'));
+
+ check('Asteroid impact table: 1–5 movements map to tables 1–5',()=>[1,2,3,4,5].every(n=>{let s=make('AST-'+n,'gunstar','star',3,3,0);s.movePlan=Array(n).fill('F');return asteroidDamageTable(s)===n}));
+ check('Asteroid impact table: reduced actual speed uses plotted movements',()=>{let s=make('AST-SLOW','gunstar','star',3,3,0);s.half=2;s.movePlan=['F'];return asteroidDamageTable(s)===1});
+ check('Asteroid impact table: repeated collisions do not escalate table',()=>{let s=make('AST-REPEAT','gunstar','star',3,3,0);s.movePlan=['F','L','F','R'];return asteroidDamageTable(s)===4&&asteroidDamageTable(s)===4});
+ check('Asteroid collision: entering each asteroid hex requires a new check',()=>{let s=make('AST-CHECK','gunstar','star',2,2,0);s.movePlan=['F','F'];let oldRocks=rocks,oldSeed=rngSeed,oldState=rngState,oldCalls=rngCalls,oldLog=history.length;try{rocks=new Set(['3,2','4,2']);seedRng(1984);applyMovement(s,'F');applyMovement(s,'F');let messages=history.slice(oldLog).filter(x=>x.includes('ASTEROID MANOEUVRE:'));return messages.length===2}finally{rocks=oldRocks;rngSeed=oldSeed;rngState=oldState;rngCalls=oldCalls;history.length=oldLog}});
+ check('Asteroid collision rolls: all 36 possible 2D6 pairs match threshold',()=>{let hits=0;for(let a=1;a<=6;a++)for(let b=1;b<=6;b++)if(asteroidCollision(a,b))hits++;return hits===10});
+
+ // Fixed-seed, actual asteroid movement + damage table integration checks.
+ // Each case restores global RNG, asteroid field and combat log state after execution.
+ function asteroidDamageFixture(seed,whiteExpected,assertion){
+  const oldRocks=rocks,oldSeed=rngSeed,oldState=rngState,oldCalls=rngCalls,oldHistory=history.slice(),oldSelected=selected,oldInspected=inspected;
+  try{
+   let s=make('AST-INTEGRATION','deck','star',2,3,0);
+   s.movePlan=['F','F','F','F'];rocks=new Set(['3,3']);seedRng(seed);
+   applyMovement(s,'F');
+   const impact=history.some(x=>x.includes('AST-INTEGRATION DAMAGE: COLLISION SPEED 4, WHITE '+whiteExpected));
+   return impact&&s.asteroidChecks===1&&s.asteroidImpacts===1&&assertion(s);
+  }finally{
+   rocks=oldRocks;rngSeed=oldSeed;rngState=oldState;rngCalls=oldCalls;history=oldHistory;selected=oldSelected;inspected=oldInspected;update();
+  }
+ }
+ check('Asteroid collision during movement schedules steering damage',()=>asteroidDamageFixture(2,2,s=>s.nextRestrict===1&&!s.dead));
+ check('Asteroid collision during movement schedules random stabilizer manoeuvres',()=>asteroidDamageFixture(11,3,s=>s.nextStabilizer===1&&!s.dead));
+ check('Asteroid collision during movement injures crew without altering weapons',()=>asteroidDamageFixture(12,1,s=>s.pilot===1&&s.laserLoss===0&&!s.particleLost));
+ check('Asteroid collision during movement damages engines',()=>asteroidDamageFixture(1,4,s=>s.engine===2&&movementLimit(s)<5));
+ check('Asteroid collision followed by combat weapon hit preserves both effects',()=>asteroidDamageFixture(3383,2,s=>{
+  if(s.nextRestrict!==1)return false;
+  damage(s,'laser'); // next seeded dice: red 6, white 1, weapon die 1
+  return s.laserLoss===1&&s.nextRestrict===1&&s.asteroidImpacts===1&&history.some(x=>x.includes('WEAPON DESTRUCTION DIE 1'));
+ }));
+
+ // Fleet-scale deterministic regression: 15 independently ordered craft, five complete
+ // movement/power/recharge/restriction cycles, without touching the live match.
+ check('Fleet stress: 15 ships retain distinct sealed orders',()=>{
+   const fleet=[make('GS-STRESS','gunstar','star',2,6,0),...Array.from({length:14},(_,i)=>make('SW-'+i,'swarm','kodan',10+Math.floor(i/7),2+i%7,3))];
+   fleet.forEach((s,i)=>{s.movePlan=i%3===0?['F']:i%3===1?['L']:['R','F'];s.ordersSealed=true});
+   return fleet.length===15&&fleet.every(s=>s.ordersSealed&&validPlan(s,s.movePlan))&&new Set(fleet.map(s=>s.id)).size===15;
+ });
+ check('Fleet stress: five turns of independent movement and power',()=>{
+   const fleet=[make('GS-STRESS','gunstar','star',2,6,0),...Array.from({length:14},(_,i)=>make('SW-'+i,'swarm','kodan',8+i%4,2+Math.floor(i/4),i%6))];
+   for(let t=0;t<5;t++)for(let i=0;i<fleet.length;i++){
+     let s=fleet[i],plan=t%2===0?['F']:[];
+     if(!validPlan(s,plan))return false;
+     if(plan.length){if(s.power<=0)return false;s.power--;for(let m of plan)step(s,m)}
+     else s.power=Math.min(20,s.power+5);
+     s.lastMove=plan.length;prepareTemporary(s);
+     if(s.power<0||s.power>20||s.d<0||s.d>5||!Number.isFinite(s.q)||!Number.isFinite(s.r))return false;
+   }
+   return fleet.length===15&&fleet.every(s=>s.power===19);
+ });
+ check('Fleet stress: restrictions and damage isolated by ship',()=>{
+   const fleet=Array.from({length:14},(_,i)=>make('SW-'+i,'swarm','kodan',8,2+i%7,3));
+   fleet[0].nextHalf=1;fleet[1].nextConstant=1;fleet[2].engine=2;
+   fleet.forEach(s=>prepareTemporary(s));
+   return fleet[0].half===1&&fleet[1].constant===0&&fleet[2].engine===2&&fleet.slice(3).every(s=>s.half===0&&s.engine===0&&s.constant===null);
+ });
+ // Integrated turn-cycle tests use isolated craft and restore global map state.
+ check('Hot-seat: sealed craft retains own vector',()=>{let s=make('S','swarm','kodan',4,4,0);s.movePlan=['L','F'];s.ordersSealed=true;return s.ordersSealed&&s.movePlan.join('')==='LF'});
+ check('Hot-seat: 14 Swarm ships can seal independent orders',()=>{let fleet=Array.from({length:14},(_,i)=>make('S'+i,'swarm','kodan',10,Math.floor(i/2),0));fleet.forEach((x,i)=>{x.movePlan=i%2?['F']:[];x.ordersSealed=true});return fleet.every(x=>x.ordersSealed)&&fleet.filter(x=>x.movePlan.length).length===7});
+ check('Hot-seat: sealed orders remain independent',()=>{let a=make('A','swarm','kodan',10,2,0),b=make('B','swarm','kodan',10,3,0);a.movePlan=['L'];b.movePlan=['R','F'];return a.movePlan.join('')==='L'&&b.movePlan.join('')==='RF'});
+ check('Scenario: duel starts on opposing short sides',()=>{let a=make('G','gunstar','star',2,6,0),b=make('D','deck','kodan',16,6,3);return a.q<3&&b.q>15&&a.d===0&&b.d===3});
+ check('Scenario: swarm two waves of seven',()=>{let a=Array.from({length:14},(_,i)=>({q:10+2*Math.floor(i/7),r:3+i%7,d:0}));return a.length===14&&a.filter(x=>x.q===10).length===7&&a.filter(x=>x.q===12).length===7&&a.every(x=>x.d===0)});
+ check('Victory: pilot death removes combat effectiveness',()=>{let a=make('G','gunstar','star',2,6,0);a.pilot=6;return !( !a.dead&&a.pilot<6 )});
+ check('Victory: exiting map removes ship',()=>{let a=make('G','gunstar','star',18,6,0);let oldLog=log;step(a,'F');return !inside(a.q,a.r)});
+ check('Full turn: plotted movement, power spend, fire eligibility, recharge',()=>{
+   let a=make('SIM-G','gunstar','star',4,4,0);
+   let plan=['F','L','F'];
+   if(!validPlan(a,plan))return false;
+   a.power-=1;a.spentPowerThisTurn=true;
+   for(let command of plan)step(a,command);
+   let moved=a.q===7&&a.r===3&&a.d===5;
+   let canFire=a.spentPowerThisTurn&&a.power===19&&powered(a)>=1;
+   a.recharge=true;a.power=Math.min(20,a.power+5);
+   return moved&&canFire&&a.power===20;
+ });
+ check('Full turn: pending half speed activates and expires',()=>{
+   let a=make('SIM-H','gunstar','star',4,4,0);
+   a.nextHalf=1;prepareTemporary(a);
+   if(a.half!==1||movementLimit(a)!==3)return false;
+   a.lastMove=2;prepareTemporary(a);
+   return a.half===0&&movementLimit(a)===5;
+ });
+ check('Full turn: injury prevents next turn, then recovery is attempted',()=>{
+   let a=make('SIM-C','gunstar','star',4,4,0);
+   a.pilot=3;a.unconsciousPilot=2;
+   recoverCrew(a,'pilot');
+   if(a.unconsciousPilot!==1)return false;
+   // The following recovery is random; a 2D6 roll can only produce a valid
+   // unconscious (1) or recovered (0) state, never reset the waiting state (2).
+   recoverCrew(a,'pilot');
+   return a.unconsciousPilot===0||a.unconsciousPilot===1;
+ });
+ check('Full turn: asteroid line of sight changes after removal',()=>{
+   let old=rocks;try{rocks=new Set(['4,4']);
+     let a={q:2,r:4},b={q:6,r:4};
+     if(!blocked(a,b))return false;
+     rocks.delete('4,4');return !blocked(a,b);
+   }finally{rocks=old}
+ });
+ check('Simultaneous stabilizer and steering: steering ignored by printed rule',()=>{let a=make('SIM-X','gunstar','star',4,4,0);a.nextRestrict=1;a.nextStabilizer=1;prepareTemporary(a);return a.stabilizer===1&&a.restrict===null&&a.deferredRestrict===0});
+ check('Ignored steering does not activate after stabilizer clears',()=>{let a=make('SIM-X','gunstar','star',4,4,0);a.nextRestrict=1;a.nextStabilizer=1;prepareTemporary(a);prepareTemporary(a);return a.stabilizer===0&&a.restrict===null&&a.deferredRestrict===0});
+ check('Two consecutive stabilizer hits do not resurrect ignored steering',()=>{let a=make('SIM-X','gunstar','star',4,4,0);a.nextRestrict=1;a.nextStabilizer=1;prepareTemporary(a);a.nextStabilizer=1;prepareTemporary(a);if(a.deferredRestrict!==0||a.restrict!==null)return false;prepareTemporary(a);return a.restrict===null});
+ check('Unconscious pilot and steering restriction preserve crew state',()=>{let a=make('SIM-X','gunstar','star',4,4,0);a.pilot=3;a.unconsciousPilot=2;a.nextRestrict=1;prepareTemporary(a);recoverCrew(a,'pilot');return a.unconsciousPilot===1&&a.restrict!==null&&a.pilot===3});
+ check('Repeated half speed and no speed change do not erase deferred order',()=>{let a=make('SIM-X','gunstar','star',4,4,0);a.lastMove=3;a.nextHalf=2;a.nextConstant=1;prepareTemporary(a);if(a.half!==2||!a.deferredConstant||a.constant!==null)return false;prepareTemporary(a);if(a.half!==1||a.constant!==null)return false;prepareTemporary(a);return a.constant===3&&a.half===0});
+ check('Crew thresholds follow printed 8/10/12',()=>crewThreshold(2)===0&&crewThreshold(3)===8&&crewThreshold(4)===10&&crewThreshold(5)===12);
+ check('Unconsciousness lasts through following turn',()=>{let a=make('TEST','gunstar','star',3,3,0);a.pilot=3;a.unconsciousPilot=2;recoverCrew(a,'pilot');return a.unconsciousPilot===1});
+ check('Healthy crew do not require recovery',()=>{let a=make('TEST','gunstar','star',3,3,0);recoverCrew(a,'pilot');return a.unconsciousPilot===0});
+ check('Hex distance is symmetric',()=>dist({q:2,r:3},{q:7,r:4})===dist({q:7,r:4},{q:2,r:3}));
+ check('Adjacent hexes have unobstructed sight',()=>hexLine({q:3,r:3},{q:4,r:3}).length===0);
+ check('Straight hex sight traverses all intermediate hexes',()=>hexLine({q:2,r:4},{q:6,r:4}).map(h=>h.q+','+h.r).join('|')==='3,4|4,4|5,4');
+ check('Asteroid blocks sight on intermediate hex',()=>{let old=rocks;try{rocks=new Set(['4,4']);return blocked({q:2,r:4},{q:6,r:4})}finally{rocks=old}});
+ check('Asteroid off line does not block sight',()=>{let old=rocks;try{rocks=new Set(['4,5']);return !blocked({q:2,r:4},{q:6,r:4})}finally{rocks=old}});
+ check('Asteroid on target hex is not intermediate obstruction',()=>{let old=rocks;try{rocks=new Set(['6,4']);return !blocked({q:2,r:4},{q:6,r:4})}finally{rocks=old}});
+ check('Asteroid on shooter hex is not intermediate obstruction',()=>{let old=rocks;try{rocks=new Set(['2,4']);return !blocked({q:2,r:4},{q:6,r:4})}finally{rocks=old}});
+ check('Diagonal cube hex sight has correct length',()=>hexLine({q:2,r:2},{q:5,r:5}).length===5);
+ check('Damage table: six rows and six columns',()=>rows.length===6&&rows.every(r=>r.length===6));
+ const valid=/^(?:F[1-9]|E[1-9]|P[1-9][0-9]?|[TRSNHWLXKD])(?:,(?:F[1-9]|E[1-9]|P[1-9][0-9]?|[TRSNHWLXKD]))*$/;
+ for(let r=0;r<6;r++)for(let c=0;c<6;c++)check('Damage result '+(r+1)+'/'+(c+1),()=>valid.test(rows[r][c]));
+ check('Gunstar starting systems',()=>{let s=make('T','gunstar','star',4,4,0);return s.power===20&&s.missiles===4&&maxMove(s)===5&&maxTurns(s)===3});
+ check('Swarm speed and missile restrictions',()=>{let s=make('T','swarm','kodan',4,4,0);return maxMove(s)===3&&s.missiles===0});
+ check('Left movement: forward then turn',()=>{let s=make('T','gunstar','star',4,4,0);step(s,'L');return s.q===5&&s.r===4&&s.d===5});
+ check('Right movement: forward then turn',()=>{let s=make('T','gunstar','star',4,4,0);step(s,'R');return s.q===5&&s.r===4&&s.d===1});
+ check('Max movement enforced',()=>{let s=make('T','gunstar','star',4,4,0);return !validPlan(s,['F','F','F','F','F','F'])});
+ check('Max turns enforced',()=>{let s=make('T','gunstar','star',4,4,0);return !validPlan(s,['L','L','L','L'])});
+ check('Half speed rounds up',()=>{let s=make('T','gunstar','star',4,4,0);s.half=1;return movementLimit(s)===3});
+ check('No speed change restricts length',()=>{let s=make('T','gunstar','star',4,4,0);s.constant=2;return validPlan(s,['F','F'])&&!validPlan(s,['F'])});
+ check('Weapon forward arc contains straight ahead',()=>{let s=make('T','gunstar','star',4,4,0);return inArc(s,{q:7,r:4},0)});
+ check('Weapon forward arc excludes directly aft',()=>{let s=make('T','gunstar','star',4,4,0);return !inArc(s,{q:1,r:4},0)});
+ check('Targeting damage raises penalty',()=>{let s=make('T','gunstar','star',4,4,0);s.aim=2;return targeting(s)===2});
+ check('Mission starts with expected fleet',()=>ships.filter(x=>!x.dead).length>0);
+ check('Reject invalid vector symbols',()=>{let s=make('T','gunstar','star',4,4,0);return !validPlan(s,['F','X'])});
+ check('Power budget starts at 20',()=>make('T','deck','kodan',4,4,0).power===20);
+ check('Engine damage reduces maximum movement',()=>{let s=make('T','gunstar','star',4,4,0);s.engine=4;return maxMove(s)===3});
+ check('Fuselage cascade reduces movement',()=>{let s=make('T','gunstar','star',4,4,0);s.hull=8;return maxMove(s)===3&&targeting(s)>=2});
+ check('Two half-speed hits limit a 5-move craft to one movement',()=>{let s=make('T','gunstar','star',4,4,0);s.half=2;return movementLimit(s)===1});
+ check('No speed change rejects excessive movement',()=>{let s=make('T','gunstar','star',4,4,0);s.constant=2;return !validPlan(s,['F','F','F'])});
+ check('Missile inventory starts at four',()=>make('T','gunstar','star',4,4,0).missiles===4);
+ check('No target means missile not launched',()=>{let s=make('T','gunstar','star',4,4,0),t=make('U','deck','kodan',18,12,3),old=ships;try{ships=[s,t];return targetFor(s,0,8)===undefined&&s.missiles===4}finally{ships=old}});
+ check('Swarm cannot carry missiles',()=>make('T','swarm','kodan',4,4,0).missiles===0);
+ check('Damaged system lowers number of weapon systems',()=>{let s=make('T','deck','kodan',4,4,0);s.engine=8;return powered(s)===1});
+ check('Deck fighter has three laser mounts',()=>{let s=make('T','deck','kodan',4,4,0);return 3-s.laserLoss===3});
+ check('Weapon arcs never throw for unsupported sector',()=>{let s=make('T','gunstar','star',4,4,0);return inArc(s,{q:5,r:4},2)===false});
+ check('Prediction leaves ship position unchanged',()=>{let s=make('T','gunstar','star',4,4,0),v=predict(s,['F','L']);return s.q===4&&s.r===4&&v.q===6&&v.r===4&&v.d===5});
+ check('Hot-seat order slots independent',()=>{let a=make('A','gunstar','star',4,4,0),b=make('B','deck','kodan',6,6,3);a.movePlan=['F','L'];b.movePlan=['R'];return a.movePlan.join('')==='FL'&&b.movePlan.join('')==='R'});
+ // Fleet and victory regression: do not alter the current live match.
+ check('Fleet: 14 independent Swarm ships plus Gunstar',()=>{let fleet=[make('GS','gunstar','star',5,6,0),...Array.from({length:14},(_,i)=>make('S'+i,'swarm','kodan',10+2*Math.floor(i/7),3+i%7,0))];return fleet.length===15&&new Set(fleet.map(s=>s.id)).size===15&&fleet.filter(s=>s.type==='swarm').length===14});
+ check('Fleet: ship damage is isolated across 14 opponents',()=>{let fleet=Array.from({length:14},(_,i)=>make('S'+i,'swarm','kodan',10,3+i%7,0));fleet[4].dead=true;return fleet.filter(s=>!s.dead).length===13&&fleet.every((s,i)=>i===4||!s.dead)});
+ check('Fleet: independent sealed firing orders',()=>{let a=make('A','gunstar','star',4,5,0),b=make('B','swarm','kodan',8,5,3);a.fire={laser:false,particle:true,missile:false};b.fire={laser:true,particle:false,missile:false};a.ordersSealed=b.ordersSealed=true;return a.ordersSealed&&b.ordersSealed&&a.fire.particle&&!b.fire.particle&&b.fire.laser&&!a.fire.laser});
+ check('Victory: pilot incapacitation does not destroy hull',()=>{let a=make('A','gunstar','star',4,5,0);a.pilot=6;return !active(a)&&!a.dead&&a.hull===0});
+ check('Death Blossom: 4 auxiliary points remain eligible before normal power debit',()=>{let s=make('G','gunstar','star',5,6,0);s.power=4;s.blossom=true;return s.power>=4&&s.power<=10&&s.blossom});
+ check('Death Blossom: 10 eligible, 11 ineligible',()=>{let s=make('G','gunstar','star',5,6,0);s.power=10;let yes=s.power>=4&&s.power<=10;s.power=11;return yes&&!(s.power>=4&&s.power<=10)});
+ check('Recharge clears incompatible Death Blossom order',()=>{let s=make('G','gunstar','star',5,6,0);s.blossom=true;s.recharge=true;s.blossom=false;return s.recharge&&!s.blossom});
+ check('Fleet: independent missile stores and damage state',()=>{let a=make('A','deck','kodan',4,4,0),b=make('B','deck','kodan',5,4,0);a.missiles--;a.hull=7;return a.missiles===3&&b.missiles===4&&a.hull===7&&b.hull===0});
+
+ // Cross-system regression: exceptional damage must survive turn preparation and recovery.
+ check('Integrated: stabilizer overrides steering for that turn only',()=>{let a=make('EDGE','gunstar','star',4,4,0);a.nextStabilizer=1;a.nextRestrict=1;prepareTemporary(a);let first=a.stabilizer===1&&a.restrict===null&&a.deferredRestrict===0;prepareTemporary(a);return first&&a.stabilizer===0&&a.restrict===null&&a.deferredRestrict===0});
+ check('Integrated: crew recovery countdown does not clear weapon damage',()=>{let a=make('EDGE','gunstar','star',4,4,0);a.gunner=3;a.unconsciousGunner=2;a.particleLost=true;a.laserLoss=1;recoverCrew(a,'gunner');return a.unconsciousGunner===1&&a.particleLost&&a.laserLoss===1});
+ check('Integrated: power, steering and life support remain independent',()=>{let a=make('EDGE','deck','kodan',4,4,0);a.power=2;a.life=3;a.nextRestrict=1;a.nextHalf=1;prepareTemporary(a);a.power--;a.life--;return a.power===1&&a.life===2&&a.restrict!==null&&a.half===1});
+ check('Integrated: repeated stabilizer damage still ignores steering',()=>{let a=make('EDGE','deck','kodan',4,4,0);a.nextRestrict=1;a.nextStabilizer=1;prepareTemporary(a);a.nextStabilizer=1;prepareTemporary(a);return a.stabilizer===1&&a.deferredRestrict===0&&a.restrict===null});
+ check('Rulebook: three half-speed hits prevent movement',()=>{let a=make('HALF','gunstar','star',4,4,0);a.nextHalf=3;prepareTemporary(a);return movementLimit(a)===0&&!validPlan(a,['F'])});
+ check('Rulebook: two half-speed hits limit speed five to one',()=>{let a=make('HALF','gunstar','star',4,4,0);a.nextHalf=2;prepareTemporary(a);return movementLimit(a)===1});
+ check('Rulebook: steering restriction remains when no stabilizer hit',()=>{let a=make('STEER','gunstar','star',4,4,0);a.nextRestrict=2;prepareTemporary(a);return a.restrict!==null&&a.stabilizer===0});
+ // Exceptional damage combinations, tested without mutating the live fleet.
+ check('Exceptional: no-left steering rejects left but permits right',()=>{let s=make('X','deck','kodan',4,4,0);s.restrict='noL';return !validPlan(s,['L'])&&validPlan(s,['R'])});
+ check('Exceptional: no-right steering rejects right but permits left',()=>{let s=make('X','deck','kodan',4,4,0);s.restrict='noR';return !validPlan(s,['R'])&&validPlan(s,['L'])});
+ check('Exceptional: forced right accepts only right steps',()=>{let s=make('X','deck','kodan',4,4,0);s.restrict='lockR';return validPlan(s,['R','R'])&&!validPlan(s,['R','F'])});
+ check('Rulebook: two half-speed hits, normal speed two, cannot move',()=>{let a=make('S','gunstar','star',4,4,0);a.engine=6;a.half=2;return movementLimit(a)===0});
+ check('Rulebook: deferred speed lock lasts two half-speed turns',()=>{let a=make('S','gunstar','star',4,4,0);a.lastMove=4;a.nextHalf=1;a.nextConstant=1;prepareTemporary(a);if(a.half!==1||a.deferredSpeedTurns!==1||a.constant!==null)return false;a.lastMove=2;prepareTemporary(a);if(a.half!==1||a.deferredSpeedTurns!==0||a.constant!==null)return false;a.lastMove=1;prepareTemporary(a);return a.half===0&&a.constant===4&&!a.deferredConstant});
+ check('Rulebook: postponed speed obeys engine damage maximum',()=>{let a=make('S','gunstar','star',4,4,0);a.lastMove=5;a.nextHalf=1;a.nextConstant=1;prepareTemporary(a);prepareTemporary(a);a.engine=6;prepareTemporary(a);return a.constant===5&&movementLimit(a)===2&&validPlan(a,['F','F'])&&!validPlan(a,['F'])});
+ check('Exceptional: simultaneous half speed and no speed change defers speed lock',()=>{let s=make('X','deck','kodan',4,4,0);s.lastMove=4;s.nextHalf=1;s.nextConstant=1;prepareTemporary(s);return s.half===1&&s.constant===null&&s.deferredConstant===true&&movementLimit(s)===3});
+ check('Exceptional: stabilizer damage randomizes steering without erasing hull',()=>{let s=make('X','deck','kodan',4,4,0);s.hull=4;s.nextStabilizer=1;prepareTemporary(s);return s.stabilizer===1&&s.hull===4});
+ check('Exceptional: laser destruction does not disable particle cannon',()=>{let s=make('X','gunstar','star',4,4,0);s.laserLoss=2;return s.particleLost===false&&s.missileLost===false&&s.laserLoss===2});
+ check('Exceptional: incapacitated gunner does not kill pilot',()=>{let s=make('X','gunstar','star',4,4,0);s.gunner=5;s.unconsciousGunner=1;return s.pilot===0&&!s.dead&&s.unconsciousGunner===1});
+ check('Exceptional: structural damage cascades into speed and targeting',()=>{let s=make('X','deck','kodan',4,4,0);s.hull=12;s.engine=4;s.aim=2;return maxMove(s)===2&&targeting(s)===3});
+ check('Exceptional: life support and missile-rack damage remain independent',()=>{let s=make('X','gunstar','star',4,4,0);s.life=2;s.missileLost=true;return s.life===2&&s.missiles===4&&s.missileLost});
+ check('Seeded RNG: identical seed reproduces 24 dice rolls',()=>{const old=[rngSeed,rngState,rngCalls];seedRng(1984);const a=Array.from({length:24},()=>rnd(6));seedRng(1984);const b=Array.from({length:24},()=>rnd(6));[rngSeed,rngState,rngCalls]=old;return a.join(',')===b.join(',')&&a.every(x=>x>=1&&x<=6)});
+ check('Seeded RNG: different seeds yield different combat sequences',()=>{const old=[rngSeed,rngState,rngCalls];seedRng(1984);const a=Array.from({length:16},()=>rnd(6));seedRng(2026);const b=Array.from({length:16},()=>rnd(6));[rngSeed,rngState,rngCalls]=old;return a.join(',')!==b.join(',')});
+ check('Seeded RNG: state snapshot restores next combat die',()=>{const old=[rngSeed,rngState,rngCalls];seedRng(77);rnd(6);const snap=[rngSeed,rngState,rngCalls];const expected=rnd(6);[rngSeed,rngState,rngCalls]=snap;const actual=rnd(6);[rngSeed,rngState,rngCalls]=old;return actual===expected});
+ // Cross-turn speed-conflict regression: inspect each actual order window.
+ check('Speed conflict: turn one enforces half speed and retains original lock',()=>{let s=make('S','gunstar','star',4,4,0);s.lastMove=4;s.nextHalf=1;s.nextConstant=1;prepareTemporary(s);return s.half===1&&movementLimit(s)===3&&s.constant===null&&s.deferredSpeedTarget===4&&s.deferredSpeedTurns===1&&validPlan(s,['F','F','F'])&&!validPlan(s,['F','F','F','F'])});
+ check('Speed conflict: second restricted turn still prevents four-hex order',()=>{let s=make('S','gunstar','star',4,4,0);s.lastMove=4;s.nextHalf=1;s.nextConstant=1;prepareTemporary(s);s.lastMove=3;prepareTemporary(s);return s.half===1&&s.constant===null&&s.deferredSpeedTurns===0&&validPlan(s,['F','F','F'])&&!validPlan(s,['F','F','F','F'])});
+ check('Speed conflict: third turn restores original four-hex requirement',()=>{let s=make('S','gunstar','star',4,4,0);s.lastMove=4;s.nextHalf=1;s.nextConstant=1;prepareTemporary(s);s.lastMove=3;prepareTemporary(s);s.lastMove=3;prepareTemporary(s);return s.half===0&&s.constant===4&&validPlan(s,['F','F','F','F'])&&!validPlan(s,['F','F','F'])});
+ check('Speed conflict: reduced engine caps forced speed to damaged maximum',()=>{let s=make('S','gunstar','star',4,4,0);s.lastMove=5;s.nextHalf=1;s.nextConstant=1;prepareTemporary(s);prepareTemporary(s);s.engine=6;prepareTemporary(s);return movementLimit(s)===2&&validPlan(s,['F','F'])&&!validPlan(s,['F'])&&!validPlan(s,['F','F','F'])});
+ // Full vector-execution checks: advance the craft, not just validate orders.
+ check('Executed speed conflict: first two turns move at reduced speed, third obeys original lock',()=>{
+  let s=make('VECTOR','gunstar','star',2,5,0);s.lastMove=4;s.nextHalf=1;s.nextConstant=1;
+  const moved=[];
+  for(let t=0;t<3;t++){
+   prepareTemporary(s);
+   const n=t===2?4:3,plan=Array(n).fill('F');
+   if(!validPlan(s,plan))return false;
+   const q=s.q,r=s.r;
+   for(const m of plan)step(s,m);
+   moved.push(dist({q,r},s));s.lastMove=n;
+  }
+  return moved.join(',')==='3,3,4'&&s.constant===4&&s.deferredConstant===false;
+ });
+ check('Executed speed conflict: engine failure caps deferred forced movement',()=>{
+  let s=make('VECTOR','gunstar','star',2,5,0);s.lastMove=5;s.nextHalf=1;s.nextConstant=1;
+  prepareTemporary(s);s.lastMove=3;prepareTemporary(s);s.lastMove=3;s.engine=6;prepareTemporary(s);
+  let plan=['F','F'];if(!validPlan(s,plan))return false;
+  const start={q:s.q,r:s.r};for(let m of plan)step(s,m);
+  return dist(start,s)===2&&s.constant===5&&movementLimit(s)===2;
+ });
+ check('Executed speed conflict: zero movement when three half-speed hits',()=>{
+  let s=make('VECTOR','gunstar','star',2,5,0);s.nextHalf=3;prepareTemporary(s);
+  return movementLimit(s)===0&&validPlan(s,[])&&!validPlan(s,['F']);
+ });
+
+ // Combined-damage turn-sequence checks: use real order validation and movement,
+ // then advance the same ship through the temporary-damage lifecycle.
+ check('Combat transition: Half Speed + No Speed Change persists across two movement phases',()=>{
+  let s=make('COMBO','gunstar','star',2,5,0);s.lastMove=4;s.nextHalf=1;s.nextConstant=1;
+  let travelled=[];
+  for(let t=0;t<3;t++){
+   prepareTemporary(s);
+   const count=t<2?2:4,plan=Array(count).fill('F');
+   if(!validPlan(s,plan))return false;
+   let start={q:s.q,r:s.r};for(let m of plan)step(s,m);
+   travelled.push(dist(start,s));s.lastMove=count;
+  }
+  return travelled.join(',')==='2,2,4'&&s.constant===4&&s.deferredConstant===false;
+ });
+ check('Combat transition: engine damage caps deferred speed on third turn',()=>{
+  let s=make('COMBO','gunstar','star',2,5,0);s.lastMove=5;s.nextHalf=1;s.nextConstant=1;
+  prepareTemporary(s);s.lastMove=3;
+  prepareTemporary(s);s.lastMove=3;s.engine=6;
+  prepareTemporary(s);
+  const plan=['F','F'];let start={q:s.q,r:s.r};
+  if(!validPlan(s,plan)||validPlan(s,['F','F','F']))return false;
+  plan.forEach(m=>step(s,m));
+  return dist(start,s)===2&&s.constant===5&&movementLimit(s)===2;
+ });
+ check('Combat transition: unconscious pilot and destroyed weapons remain independent of speed effects',()=>{
+  let s=make('COMBO','gunstar','star',2,5,0);s.lastMove=4;s.nextHalf=1;s.nextConstant=1;
+  s.unconsciousPilot=2;s.laserLoss=2;s.particleLost=true;s.missileLost=true;
+  prepareTemporary(s);
+  if(s.unconsciousPilot!==2||s.laserLoss!==2||!s.particleLost||!s.missileLost)return false;
+  prepareTemporary(s);
+  return s.unconsciousPilot===2&&s.laserLoss===2&&s.particleLost&&s.missileLost&&s.deferredConstant;
+ });
+ check('Combat transition: steering/stabilizer conflict does not alter speed restrictions',()=>{
+  let s=make('COMBO','gunstar','star',2,5,0);s.lastMove=4;
+  s.nextRestrict=1;s.nextStabilizer=1;s.nextHalf=1;s.nextConstant=1;
+  prepareTemporary(s);
+  return s.stabilizer===1&&s.restrict===null&&s.half===1&&s.deferredConstant&&s.deferredSpeedTurns===1;
+ });
+ // Damage lifecycle: verify that effects produced during asteroid movement survive into later turns.
+ check('Asteroid steering damage: pending effect activates next turn and then clears',()=>{
+  let s=make('LIFE-STEER','deck','star',4,4,0);
+  s.nextRestrict=1;
+  let oldSeed=rngSeed,oldState=rngState,oldCalls=rngCalls;
+  try{seedRng(1984);prepareTemporary(s);let active=s.restrict;
+   if(!active||s.nextRestrict!==0)return false;
+   prepareTemporary(s);return s.restrict===null&&s.nextRestrict===0;
+  }finally{rngSeed=oldSeed;rngState=oldState;rngCalls=oldCalls}
+ });
+ check('Asteroid stabilizer damage: random steering lasts one turn',()=>{
+  let s=make('LIFE-STAB','deck','star',4,4,0);s.nextStabilizer=1;
+  prepareTemporary(s);if(s.stabilizer!==1||s.nextStabilizer!==0)return false;
+  prepareTemporary(s);return s.stabilizer===0;
+ });
+ check('Asteroid engine damage: reduced movement persists after temporary damage clears',()=>{
+  let s=make('LIFE-ENGINE','deck','star',4,4,0);s.engine=6;s.nextHalf=1;
+  prepareTemporary(s);let restricted=movementLimit(s);
+  prepareTemporary(s);return s.engine===6&&s.half===0&&movementLimit(s)>restricted&&movementLimit(s)<5;
+ });
+ check('Asteroid crew injury: unconsciousness requires missed turn before recovery roll',()=>{
+  let s=make('LIFE-CREW','deck','star',4,4,0);s.pilot=3;s.unconsciousPilot=2;
+  recoverCrew(s,'pilot');return s.unconsciousPilot===1&&s.pilot===3;
+ });
+ check('Asteroid and combat weapon damage: destroyed weapons never reset on next turn',()=>{
+  let s=make('LIFE-WEAPON','deck','star',4,4,0);
+  s.laserLoss=1;s.particleLost=true;s.missileLost=true;s.nextStabilizer=1;
+  prepareTemporary(s);prepareTemporary(s);
+  return s.laserLoss===1&&s.particleLost&&s.missileLost&&s.stabilizer===0;
+ });
+ check('Asteroid counters: every new ship starts without collisions',()=>{let s=make('AST-COUNTER','gunstar','star',2,2,0);return s.asteroidChecks===0&&s.asteroidImpacts===0});
+ check('Asteroid impact: collision counter remains independent of hull damage',()=>{let s=make('AST-HULL','gunstar','star',2,2,0);s.asteroidChecks=3;s.asteroidImpacts=2;s.hull=8;return s.asteroidChecks===3&&s.asteroidImpacts===2&&s.hull===8});
+ check('Asteroid impact: separate ships retain separate counters',()=>{let a=make('AST-A','gunstar','star',2,2,0),b=make('AST-B','deck','kodan',3,3,3);a.asteroidChecks=4;a.asteroidImpacts=3;return b.asteroidChecks===0&&b.asteroidImpacts===0});
+ const passed=tests.filter(t=>t[0]==='PASS').length;let d=document.getElementById('diagnosticsDialog');if(!d){d=document.createElement('dialog');d.id='diagnosticsDialog';d.style.cssText='background:#09182b;color:#d5f4ff;border:1px solid #55f7ff;max-width:min(90vw,750px);max-height:80vh;overflow:auto';document.body.appendChild(d)}
+ d.replaceChildren();let title=document.createElement('h2');title.textContent='RULES DIAGNOSTICS · '+passed+'/'+tests.length+' PASSED';title.style.color=passed===tests.length?'#55f7ff':'#ff5c77';d.appendChild(title);let desc=document.createElement('p');desc.textContent='Structural, integrated turn-cycle and movement checks. These do not prove every interpretation of the printed rules or replace a full gameplay test.';d.appendChild(desc);let pre=document.createElement('pre');pre.style.cssText='white-space:pre-wrap;font:12px monospace';pre.textContent=tests.map(t=>t.join(' — ')).join('\n');d.appendChild(pre);let close=document.createElement('button');close.textContent='CLOSE';close.onclick=()=>d.close();d.appendChild(close);d.showModal();log('DIAGNOSTICS: '+passed+'/'+tests.length+' CHECKS PASSED.');
+}
+cv.addEventListener('click',e=>{let rect=cv.getBoundingClientRect(),x=e.clientX-rect.left,y=e.clientY-rect.top,best=null,d=Infinity;for(let s of ships.filter(s=>!s.dead)){let p=xy(s.q,s.r),dd=Math.hypot(x-p.x,y-p.y);if(dd<d){d=dd;best=s}}if(d<geometry()*1.2&&best){if(best.team!==humanSide||playing||(mode==='hotseat'&&best.ordersSealed)){inspected=best;log(best.id+' TELEMETRY INSPECTED — CURRENT DAMAGE / POWER / SYSTEMS SHOWN.');update();return}inspected=null;if(selected!==best){selected=best;orders=best.movePlan?.slice()||[]}update()}});$('new').onclick=init;$('fwd').onclick=()=>add('F');$('left').onclick=()=>add('L');$('right').onclick=()=>add('R');$('hold').onclick=()=>add('H');$('undo').onclick=()=>{if(!playing){orders.pop();update()}};$('execute').onclick=execute;$('recharge').onclick=recharge;$('blossom').onclick=blossom;$('zoomIn').onclick=()=>{scale=clamp(scale*1.2,.6,2.5);draw()};$('zoomOut').onclick=()=>{scale=clamp(scale/1.2,.6,2.5);draw()};$('center').onclick=()=>{ox=0;oy=0;scale=1;draw()};$('help').onclick=()=>$('helpDialog').showModal();let testButton=document.createElement('button');testButton.textContent='RUN DIAGNOSTICS';testButton.onclick=runDiagnostics;document.querySelector('.mapwrap').parentElement.querySelector('.controls').appendChild(testButton);$('copyBattleReport').onclick=async()=>{const report='THE LAST STARFIGHTER — SEEDED BATTLE REPORT\nScenario: '+$('scenario').selectedOptions[0].text+'\nSeed: '+rngSeed+'\nTurn: '+turn+'\nPhase: '+phase+'\n\n'+$('log').innerText;try{await navigator.clipboard.writeText(report);log('BATTLE REPORT COPIED TO CLIPBOARD.')}catch(e){const b=new Blob([report],{type:'text/plain'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='last-starfighter-seed-'+rngSeed+'-report.txt';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);log('BATTLE REPORT SAVED AS TEXT FILE.')}};$('closeHelp').onclick=()=>$('helpDialog').close();let speed=document.createElement('label');speed.innerHTML='PLAYBACK SPEED <select id="playSpeed"><option value="750">SLOW</option><option value="420" selected>NORMAL</option><option value="180">FAST</option><option value="15">TURBO (FLEET)</option></select>';document.querySelector('.controls').appendChild(speed);$('arc').addEventListener('change',()=>{inspected=null;draw()});let arcToggle=document.createElement('button');arcToggle.textContent='FIRING ARCS: ON';arcToggle.onclick=()=>{showArcs=!showArcs;arcToggle.textContent='FIRING ARCS: '+(showArcs?'ON':'OFF');draw()};document.querySelector('.mapwrap').parentElement.querySelector('.controls').appendChild(arcToggle);$('playSpeed').onchange=()=>delay=Number($('playSpeed').value);window.addEventListener('resize',resize);resize();init();
+// Browser-only automated battle harness. Enabled explicitly via ?battle_test=1.
+// It never runs during ordinary gameplay and is not shown in the player UI.
+if(window.__ENABLE_BATTLE_TEST||new URLSearchParams(location.search).has('battle_test'))window.__battleTest={
+ state:()=>({turn,phase,ended,playing,ships:ships.map(s=>({...s,movePlan:[...s.movePlan]})),history:[...history]}),
+ setRocks:(coords)=>{if(playing)throw Error("playback active");rocks=new Set(coords.map(([q,r])=>key(q,r)));draw()},
+ setShipPosition:(id,q,r,d)=>{if(playing)throw Error("playback active");let s=ships.find(s=>s.id===id);if(!s)throw Error("unknown ship "+id);s.q=q;s.r=r;s.d=d;update()},
+ setup:(which,config={})=>{if(playing)throw Error('playback active');$('scenario').value=which;$('mode').value=config.mode||'ai';$('asteroids').value=config.asteroids||'none';init();delay=0;showArcs=false;update()},
+ damage:(id,changes)=>{if(playing)throw Error('playback active');let s=ships.find(s=>s.id===id);if(!s)throw Error('unknown ship '+id);Object.assign(s,changes);update()},
+ rollDamage:(id,kind)=>{if(playing)throw Error('playback active');let s=ships.find(s=>s.id===id);if(!s)throw Error('unknown ship '+id);damage(s,kind);update()},
+ turn:async(plan=[],fire={laser:false,particle:false,missile:false})=>{if(playing||ended)throw Error('cannot start turn');orders=plan.slice();$('laser').checked=!!fire.laser;$('particle').checked=!!fire.particle;$('missile').checked=!!fire.missile;await execute();return {turn,ended,phase}},
+};})();
+
+</script></body></html>
