@@ -13,21 +13,22 @@ const slotUid=(r,slot)=>r[slot==='host'?'hostUid':slot==='guest'?'guestUid':slot
 const slotReady=(r,slot)=>!!r[slot==='host'?'hostReady':slot==='guest'?'guestReady':slot+'Ready'];
 const sideOf=slot=>slot.startsWith('host')?'STAR LEAGUE':'KO-DAN';
 const team=(r,side)=>slots.filter(slot=>slot.startsWith(side)&&!!slotUid(r,slot));
-const balanced=r=>{const h=team(r,'host'),g=team(r,'guest');return h.length===g.length&&h.length>0&&(h.length===1||r.scenario!=='swarm')&&h.every(x=>slotReady(r,x))&&g.every(x=>slotReady(r,x))};
+const launchBlockers=r=>{const h=team(r,'host'),g=team(r,'guest'),missing=[];if(!h.length||!g.length||h.length!==g.length)missing.push('NEED EQUAL TEAMS (CURRENTLY '+h.length+' VS '+g.length+')');if(h.length===2&&r.scenario==='swarm')missing.push('SWARM SUPPORTS 1v1 ONLY');for(const slot of [...h,...g])if(!slotReady(r,slot))missing.push((slot==='host'?'GS-01':slot==='host2'?'GS-02':slot==='guest'?'DF-01':'DF-02')+' NOT READY');return missing};
+const balanced=r=>launchBlockers(r).length===0;
 function show(r){
  current=r;
- const host=team(r,'host'),guest=team(r,'guest'),equal=host.length===guest.length&&host.length>0,ready=balanced(r);
+ const host=team(r,'host'),guest=team(r,'guest'),equal=host.length===guest.length&&host.length>0,blockers=launchBlockers(r),ready=blockers.length===0;
  $('scenarioSettings').hidden=role!=='host';
  $('scenarioChoice').value=r.scenario||'duel';$('lobbyAsteroids').checked=!!r.asteroids;drawAsteroidPreview(!!r.asteroids);
  $('scenarioStatus').textContent=(r.scenario==='swarm'?'KO-DAN SWARM (EXPERIMENTAL)':'GUNSTAR DUEL')+(r.asteroids?' · ASTEROIDS':' · CLEAR SPACE');
- $('launch').disabled=!ready;
+ $('launch').disabled=!ready;$('launch').textContent=ready?'LAUNCH ONLINE BATTLE · READY':'LAUNCH LOCKED · '+(equal?'WAITING FOR READY':'UNEVEN TEAMS');$('launch').title=ready?'All pilots ready to launch':blockers.join(' · ');$('launchHint').textContent=ready?'✓ ALL PILOTS READY · 1v1 OR 2v2 MISSION CAN START':'LAUNCH REQUIREMENTS: '+blockers.join(' · ');$('launchHint').className=ready?'ok':'wait';
  $('roomPanel').hidden=false;$('roomCode').textContent=room;
  $('side').textContent=sideOf(role)+' · '+(role.endsWith('2')?'PILOT 2':'PILOT 1');
  $('hostState').textContent=host.map(slot=>(slot==='host'?'P1':'P2')+': '+(slotReady(r,slot)?'READY':'WAITING')).join(' · ')||'AWAITING PILOT';
  $('guestState').textContent=guest.map(slot=>(slot==='guest'?'P1':'P2')+': '+(slotReady(r,slot)?'READY':'WAITING')).join(' · ')||'AWAITING PILOT';
  $('balanceState').textContent=host.length+' vs '+guest.length+(equal?' · BALANCED':' · UNEVEN — LAUNCH BLOCKED');
  $('balanceState').className=equal?'ok':'wait';
- $('sessionState').textContent=ready?'ALL PILOTS READY · LAUNCH ENABLED':!equal?'WAITING FOR EQUAL TEAM SIZES':host.length===2&&r.scenario==='swarm'?'SWARM IS 1v1 ONLY · SELECT DUEL FOR 2v2':'WAITING FOR ALL PILOTS TO READY';
+ $('sessionState').textContent=ready?'ALL PILOTS READY · LAUNCH ENABLED':blockers.join(' · ');
  $('ready').textContent=slotReady(r,role)?'CANCEL READY':'MARK READY';$('ready').disabled=false;
 }
 function subscribe(code){unsubscribe?.();room=code;unsubscribe=onSnapshot(doc(db,'rooms',room),snap=>{
@@ -86,7 +87,7 @@ $('saveScenario').onclick=saveScenario;
 $('lobbyAsteroids').addEventListener('change',()=>{drawAsteroidPreview($('lobbyAsteroids').checked);saveScenario()});
 $('scenarioChoice').addEventListener('change',saveScenario);
 $('create').onclick=createRoom;$('join').onclick=()=>joinRoom($('codeInput').value);
-$('launch').onclick=()=>{if(!current||!balanced(current)){notice('Launch blocked: equal teams and all pilots ready required.');return}location.href='./online-battle.html#room='+room};
+$('launch').onclick=()=>{if(!current||!balanced(current)){notice('Launch blocked: '+(current?launchBlockers(current).join(' · '):'ROOM NOT LOADED'));return}location.href='./online-battle.html#room='+room};
 $('ready').onclick=async()=>{if(!room||!role||!current)return;try{
  const field=role+'Ready';
  await updateDoc(doc(db,'rooms',room),{[field]:!slotReady(current,role)});
