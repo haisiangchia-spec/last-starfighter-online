@@ -34,7 +34,7 @@ test('missile and particle modifiers use different damage tables',()=>{
  assert.equal(Number(pa[0].match(/TABLE (\d)/)[1]),table('particle'));
 });
 test('simultaneous lethal hull failures end in a draw',()=>{
- const s=scenario();s.ships.host.hull=20;s.ships.guest.hull=20;
+ const s=scenario();s.ships.host.hull=20;s.ships.guest.hull=20;s.ships.host.dead=true;s.ships.guest.dead=true;
  const result=c.apply(s,orders());
  assert.equal(result.winner,'DRAW');
  assert.equal(result.phase,'finished');
