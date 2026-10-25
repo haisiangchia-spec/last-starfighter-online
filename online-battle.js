@@ -13,11 +13,28 @@ function moveLimit(s){let n=Math.max(0,5-Math.max(Math.floor((s.engine||0)/2),Ma
 function turnLimit(s){return Math.max(0,3-Math.max(Math.floor((s.engine||0)/4),Math.floor((s.hull||0)/8)))}
 function predict(ship,plan){const s={...ship};const steps=parsePlan(plan);if(steps.length>moveLimit(s))throw Error('Engine damage limits movement to '+moveLimit(s)+' steps.');if(!s.stabilizer&&steps.filter(x=>x!=='F').length>turnLimit(s))throw Error('System damage limits turns to '+turnLimit(s)+'.');if((s.pilot||0)>=6&&steps.length)throw Error('Pilot killed; movement is uncontrolled.');if(s.unconsciousPilot===1&&steps.length)throw Error('Pilot unconscious.');if(s.restrict==='noL'&&steps.includes('L')||s.restrict==='noR'&&steps.includes('R'))throw Error('Steering restriction prevents this turn.');if(s.restrict?.startsWith('lock')&&steps.some(x=>x!==({lockL:'L',lockR:'R',lockF:'F'}[s.restrict])))throw Error('Steering locked to '+s.restrict+'.');if(s.constant!==null&&s.constant!==undefined&&steps.length!==Math.min(s.constant,moveLimit(s)))throw Error('Constant-speed damage requires '+Math.min(s.constant,moveLimit(s))+' steps.');for(const cmd of steps){const [dq,dr]=dirs[s.d];s.q+=dq;s.r+=dr;if(cmd==='L')s.d=(s.d+5)%6;if(cmd==='R')s.d=(s.d+1)%6;if(s.q<0||s.q>=NQ||s.r<0||s.r>=NR)throw Error('Movement would leave the tactical map.')}return s}
 const facingNames=['E','SE','SW','W','NW','NE'];
-function facingToTarget(a,b){const dq=b.q-a.q,dr=b.r-a.r;let best=0,score=-Infinity;for(let i=0;i<6;i++){const [x,y]=dirs[i],v=(2*x+y)*dq+(x+2*y)*dr;if(v>score){score=v;best=i}}return best}
+function facingToTarget(a,b){
+ const dq=b.q-a.q,dr=b.r-a.r;if(dq===0&&dr===0)return 0;
+ let best=0,bestError=Infinity;
+ for(let j=0;j<6;j++){
+  const u=dirs[j],cross=Math.abs(u[0]*dr-u[1]*dq),dot=u[0]*dq+u[1]*dr;
+  if(dot<=0)continue;
+  const error=cross/Math.max(.001,dot);
+  if(error<bestError){bestError=error;best=j}
+ }
+ return best;
+}
 function inArc(a,b){const t=facingToTarget(a,b);return ((t-a.d+6)%6)<=1||((a.d-t+6)%6)<=1}
 
 const asteroidHexes=[[6,3],[7,4],[8,7],[10,5],[12,8],[14,4]];const rockKey=(q,r)=>q+','+r;const rocksFor=s=>new Set((s?.asteroids||[]).map(p=>rockKey(p[0],p[1])));
-function hexLine(a,b){const n=distance(a,b),line=[];for(let i=1;i<n;i++){const t=i/n,x=a.q+(b.q-a.q)*t,z=a.r+(b.r-a.r)*t,y=-x-z;let q=Math.round(x),r=Math.round(z),cy=Math.round(y);const dx=Math.abs(q-x),dy=Math.abs(cy-y),dz=Math.abs(r-z);if(dx>dy&&dx>dz)q=-cy-r;else if(dy>dz)cy=-q-r;else r=-q-cy;line.push([q,r])}return line}
+function hexLine(a,b){const n=distance(a,b),line=[];for(let i=1;i<n;i++){
+ const t=i/n,x=a.q+(b.q-a.q)*t,z=a.r+(b.r-a.r)*t,y=-x-z;
+ const rx0=Math.round(x+1e-7),ry0=Math.round(y+1e-7),rz0=Math.round(z-2e-7);
+ let rx=rx0,ry=ry0,rz=rz0;
+ const dx=Math.abs(rx-(x+1e-7)),dy=Math.abs(ry-(y+1e-7)),dz=Math.abs(rz-(z-2e-7));
+ if(dx>dy&&dx>dz)rx=-ry-rz;else if(dy>dz)ry=-rx-rz;else rz=-rx-ry;
+ line.push([rx,rz]);
+}return line}
 function blocked(a,b,rocks){return hexLine(a,b).some(([q,r])=>rocks.has(rockKey(q,r)))}
 function firingBlocked(a,b,rocks){return blocked(a,b,rocks)||(rocks.has(rockKey(a.q,a.r))&&rocks.has(rockKey(b.q,b.r)))}
 const initial=(asteroids=false)=>({asteroids:asteroids?asteroidHexes:[],turn:1,ships:{host:{q:2,r:6,d:0,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false},guest:{q:16,r:6,d:3,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false}},submitted:{host:false,guest:false},phase:'orders',log:['Skirmish initiated. Both pilots must submit orders.'],winner:null});
@@ -106,7 +123,7 @@ function apply(s,orders){
   ship.power=Math.max(0,ship.power-1);
   let shotIndex=0;
   for(const kind of enabled){
-   if(kind==='particle'&&ship.particleLost||kind==='missile'&&ship.missileLost){events.push(label+' '+kind.toUpperCase()+' OFFLINE');continue}
+   if((kind==='particle'&&ship.particleLost)||(kind==='missile'&&ship.missileLost)){events.push(label+' '+kind.toUpperCase()+' OFFLINE');continue}
    if(kind==='missile'&&(ship.missiles??4)<1){events.push(label+' OUT OF MISSILES');continue}
    const n=kind==='laser'?Math.max(0,(side==='host'?2:3)-(ship.laserLoss||0)):1;
    for(let i=0;i<n;i++){
