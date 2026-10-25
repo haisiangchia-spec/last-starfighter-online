@@ -131,3 +131,21 @@ test('damage rolls remain independent for multiple hits on same ship',()=>{
   assert.ok(damage[i].includes('RED '+c.roll(rollSeed*1009+47)),'Each hit uses its own red die seed');
  }
 });
+
+test('finished matches are not silently reset on refresh',()=>{
+ const init=source.slice(source.indexOf('async function initialize()'),source.indexOf('let lastTurn='));
+ assert.match(init,/snap\.data\(\)\.phase==='ended'/);
+ assert.doesNotMatch(init,/\['ended','finished'\]/);
+});
+test('guest waits for host when rematch still has stale ended snapshot',()=>{
+ const init=source.slice(source.indexOf('async function initialize()'),source.indexOf('let lastTurn='));
+ assert.match(init,/Waiting for host to initialize rematch/);
+ assert.match(init,/r\.hostReady&&r\.guestReady/);
+});
+test('constant speed orders require the exact permitted movement length',()=>{
+ const ship=scenario().ships.host;
+ ship.constant=3;
+ const next=c.apply({...scenario(),ships:{...scenario().ships,host:ship}},orders({plan:'F',fire:'none'}));
+ assert.equal(next.ships.host.q,ship.q);
+ assert.ok(next.log.some(x=>x.includes('INVALID VECTOR')));
+});
