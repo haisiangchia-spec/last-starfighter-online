@@ -53,10 +53,17 @@ test('missile blast is eligible to hit friendly ship within one hex',()=>{
  const s=scenario();
  s.ships.host={...s.ships.host,q:8,r:6,d:0};
  s.ships.guest={...s.ships.guest,q:9,r:6,d:3};
- const next=c.apply(s,orders({plan:'',fire:'missile'},{plan:'',fire:'none'}));
- const blasts=next.log.filter(x=>x.includes('MISSILE BLAST'));
- // A miss is legitimate; if a blast occurs it must include both adjacent craft.
- if(blasts.length){assert.equal(blasts.length,2)}
+ let confirmed=null;
+ for(let turn=1;turn<=120;turn++){
+  s.turn=turn;
+  const next=c.apply(s,orders({plan:'',fire:'missile'},{plan:'',fire:'none'}));
+  if(next.lastVolley.shots.some(x=>x.side==='host'&&x.kind==='missile'&&x.hit)){confirmed=next;break}
+ }
+ assert.ok(confirmed,'Expected at least one confirmed missile hit within 120 deterministic turns');
+ const blasts=confirmed.log.filter(x=>x.includes('MISSILE BLAST'));
+ assert.equal(blasts.length,2,'Both adjacent ships must receive missile blast damage');
+ assert.ok(blasts.some(x=>x.includes('STAR LEAGUE')));
+ assert.ok(blasts.some(x=>x.includes('KO-DAN')));
 });
 test('crew injury thresholds match original',()=>{
  assert.equal(c.crewThreshold(2),0);
@@ -78,4 +85,46 @@ test('asteroid between ships blocks line of sight',()=>{
 test('same seed and orders resolve identically',()=>{
  const s=scenario(),o=orders({plan:'FF',fire:'laser'},{plan:'FF',fire:'laser'});
  assert.deepEqual(JSON.parse(JSON.stringify(c.apply(s,o))),JSON.parse(JSON.stringify(c.apply(s,o))));
+});
+
+test('two simultaneous hits resolve independently even when a ship is destroyed',()=>{
+ const s=scenario();
+ s.ships.host={...s.ships.host,q:8,r:6,d:0,hull:19};
+ s.ships.guest={...s.ships.guest,q:9,r:6,d:3,hull:19};
+ let resolved=null;
+ for(let turn=1;turn<=120;turn++){
+  s.turn=turn;
+  const next=c.apply(s,orders({plan:'',fire:'laser'},{plan:'',fire:'laser'}));
+  if(next.lastVolley.shots.some(x=>x.side==='host'&&x.hit)&&next.lastVolley.shots.some(x=>x.side==='guest'&&x.hit)){resolved=next;break}
+ }
+ assert.ok(resolved,'Expected a turn where both sides land laser hits');
+ assert.equal(resolved.winner,'DRAW');
+ assert.ok(resolved.log.some(x=>x.includes('STAR LEAGUE DAMAGE')));
+ assert.ok(resolved.log.some(x=>x.includes('KO-DAN DAMAGE')));
+});
+test('newly injured crew misses the following turn and then receives recovery checks',()=>{
+ const s=scenario();s.ships.host.pilot=4;s.ships.host.unconsciousPilot=2;
+ const next=c.apply(s,orders());
+ assert.equal(next.ships.host.unconsciousPilot,1);
+ const following=c.apply(next,orders());
+ assert.ok([0,1].includes(following.ships.host.unconsciousPilot));
+});
+test('damage rolls remain independent for multiple hits on same ship',()=>{
+ const s=scenario();
+ s.ships.host={...s.ships.host,q:8,r:6,d:0};
+ s.ships.guest={...s.ships.guest,q:9,r:6,d:3};
+ let found=null;
+ for(let turn=1;turn<=120;turn++){
+  s.turn=turn;
+  const next=c.apply(s,orders({plan:'',fire:'laser'},{plan:'',fire:'none'}));
+  if(next.lastVolley.shots.filter(x=>x.side==='host'&&x.hit).length===2){found=next;break}
+ }
+ assert.ok(found,'Expected a turn where both Gunstar lasers hit');
+ const damage=found.log.filter(x=>x.includes('KO-DAN DAMAGE'));
+ assert.equal(damage.length,2);
+ const seed=found.turn-1;
+ for(let i=0;i<2;i++){
+  const rollSeed=seed*10000+5000+i*37+1;
+  assert.ok(damage[i].includes('RED '+c.roll(rollSeed*1009+47)),'Each hit uses its own red die seed');
+ }
 });
