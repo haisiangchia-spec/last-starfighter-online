@@ -19,7 +19,7 @@ function show(r){
  current=r;
  const host=team(r,'host'),guest=team(r,'guest'),equal=host.length===guest.length&&host.length>0,blockers=launchBlockers(r),ready=blockers.length===0;
  $('scenarioSettings').hidden=role!=='host';
- $('scenarioChoice').value=r.scenario||'duel';$('lobbyAsteroids').checked=!!r.asteroids;drawAsteroidPreview(!!r.asteroids);
+ $('scenarioChoice').value=r.scenario||'duel';$('lobbyAsteroids').checked=!!r.asteroids;$('battleSeed').value=String(currentSeed(r));drawAsteroidPreview(!!r.asteroids,currentSeed(r));
  $('scenarioStatus').textContent=(r.scenario==='swarm'?'KO-DAN SWARM (EXPERIMENTAL)':'GUNSTAR DUEL')+(r.asteroids?' · ASTEROIDS':' · CLEAR SPACE');
  $('launch').disabled=!ready;$('launch').textContent=ready?'LAUNCH ONLINE BATTLE · READY':'LAUNCH LOCKED · '+(equal?'WAITING FOR READY':'UNEVEN TEAMS');$('launch').title=ready?'All pilots ready to launch':blockers.join(' · ');$('launchHint').textContent=ready?'✓ ALL PILOTS READY · 1v1 OR 2v2 MISSION CAN START':'LAUNCH REQUIREMENTS: '+blockers.join(' · ');$('launchHint').className=ready?'ok':'wait';
  $('roomPanel').hidden=false;$('roomCode').textContent=room;
@@ -39,7 +39,7 @@ function subscribe(code){unsubscribe?.();room=code;unsubscribe=onSnapshot(doc(db
 },error)}
 async function createRoom(){if(!uid)return;try{
  $('create').disabled=true;let code;for(let i=0;i<5;i++){code=randomCode();if(!(await getDoc(doc(db,'rooms',code))).exists())break;}
- await setDoc(doc(db,'rooms',code),{hostUid:uid,guestUid:null,host2Uid:null,guest2Uid:null,hostReady:false,guestReady:false,host2Ready:false,guest2Ready:false,createdAt:serverTimestamp(),scenario:'duel',asteroids:false});
+ await setDoc(doc(db,'rooms',code),{hostUid:uid,guestUid:null,host2Uid:null,guest2Uid:null,hostReady:false,guestReady:false,host2Ready:false,guest2Ready:false,createdAt:serverTimestamp(),scenario:'duel',asteroids:false,seed:1984});
  subscribe(code);history.replaceState(null,'','#room='+code);
 }catch(e){error(e)}finally{$('create').disabled=false}}
 async function joinRoom(code){if(!uid)return;code=code.toUpperCase().trim();
@@ -71,29 +71,33 @@ function asteroidPositionsForSeed(seed=1984){
  for(let i=0;i<22;i++){const q=5+Math.floor(random()*9),r=Math.floor(random()*13);rocks.add(q+','+r)}
  return [...rocks].map(p=>p.split(',').map(Number));
 }
-const asteroidPositions=asteroidPositionsForSeed();
-function drawAsteroidPreview(enabled){
+const currentSeed=r=>Number.isInteger(r?.seed)&&r.seed>=1&&r.seed<=4294967295?r.seed:1984;
+const asteroidPositions=seed=>asteroidPositionsForSeed(seed);
+function drawAsteroidPreview(enabled,seed=1984){
  const canvas=$('asteroidPreview');if(!canvas)return;
  const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
  ctx.clearRect(0,0,w,h);ctx.fillStyle='#081a25';ctx.fillRect(0,0,w,h);
  const scale=Math.min((w-40)/24,(h-28)/16),point=(q,r)=>[22+scale*(q+r/2),16+scale*.87*r];
  for(let q=0;q<19;q++)for(let r=0;r<13;r++){const [x,y]=point(q,r);ctx.beginPath();ctx.arc(x,y,1.1,0,Math.PI*2);ctx.fillStyle='#265263';ctx.fill()}
- if(enabled)for(const [q,r] of asteroidPositions){const [x,y]=point(q,r);ctx.beginPath();for(let i=0;i<7;i++){const a=i*Math.PI*2/7,rad=i%2?6:8;i?ctx.lineTo(x+rad*Math.cos(a),y+rad*Math.sin(a)):ctx.moveTo(x+rad*Math.cos(a),y+rad*Math.sin(a))}ctx.closePath();ctx.fillStyle='#9d6a35';ctx.fill();ctx.strokeStyle='#ffc65b';ctx.lineWidth=1.4;ctx.stroke()}
- ctx.font='12px monospace';ctx.fillStyle=enabled?'#ffc65b':'#9ab1bc';ctx.fillText(enabled?asteroidPositions.length+' ASTEROIDS · SEED 1984':'CLEAR SPACE · NO ASTEROIDS',12,h-10);
+ if(enabled)for(const [q,r] of asteroidPositions(seed)){const [x,y]=point(q,r);ctx.beginPath();for(let i=0;i<7;i++){const a=i*Math.PI*2/7,rad=i%2?6:8;i?ctx.lineTo(x+rad*Math.cos(a),y+rad*Math.sin(a)):ctx.moveTo(x+rad*Math.cos(a),y+rad*Math.sin(a))}ctx.closePath();ctx.fillStyle='#9d6a35';ctx.fill();ctx.strokeStyle='#ffc65b';ctx.lineWidth=1.4;ctx.stroke()}
+ ctx.font='12px monospace';ctx.fillStyle=enabled?'#ffc65b':'#9ab1bc';ctx.fillText(enabled?asteroidPositions(seed).length+' ASTEROIDS':'CLEAR SPACE · NO ASTEROIDS',12,h-10);
 }
 async function saveScenario(){
  if(role!=='host'||!room||!current)return;
  const button=$('saveScenario');button.disabled=true;
  try{
-  const asteroid=$('lobbyAsteroids').checked,scenario=$('scenarioChoice').value;
-  await updateDoc(doc(db,'rooms',room),{scenario,asteroids:asteroid,hostReady:false,guestReady:false,host2Ready:false,guest2Ready:false});
-  notice('SAVED: '+(asteroid?'ASTEROID FIELD ENABLED ('+asteroidPositions.length+' ROCKS)':'CLEAR SPACE')+'. All pilots must ready up again.');
- }catch(e){error(e);$('lobbyAsteroids').checked=!!current.asteroids;drawAsteroidPreview(!!current.asteroids)}
+  const asteroid=$('lobbyAsteroids').checked,scenario=$('scenarioChoice').value,seed=Number($('battleSeed').value);
+  if(!Number.isSafeInteger(seed)||seed<1||seed>4294967295)throw Error('Seed must be a whole number between 1 and 4294967295.');
+  await updateDoc(doc(db,'rooms',room),{scenario,asteroids:asteroid,seed,hostReady:false,guestReady:false,host2Ready:false,guest2Ready:false});
+  notice('SAVED: '+(asteroid?'ASTEROID FIELD ENABLED ('+asteroidPositions(seed).length+' ROCKS)':'CLEAR SPACE')+' · SEED '+seed+'. All pilots must ready up again.');
+ }catch(e){error(e);$('lobbyAsteroids').checked=!!current.asteroids;$('battleSeed').value=String(currentSeed(current));drawAsteroidPreview(!!current.asteroids,currentSeed(current))}
  finally{button.disabled=false}
 }
 $('saveScenario').onclick=saveScenario;
-$('lobbyAsteroids').addEventListener('change',()=>{drawAsteroidPreview($('lobbyAsteroids').checked);saveScenario()});
+$('lobbyAsteroids').addEventListener('change',()=>{drawAsteroidPreview($('lobbyAsteroids').checked,Number($('battleSeed').value)||1984);saveScenario()});
 $('scenarioChoice').addEventListener('change',saveScenario);
+$('battleSeed').addEventListener('change',saveScenario);
+$('randomSeed').addEventListener('click',()=>{const n=new Uint32Array(1);crypto.getRandomValues(n);$('battleSeed').value=String(n[0]||1);drawAsteroidPreview($('lobbyAsteroids').checked,Number($('battleSeed').value));saveScenario()});
 $('create').onclick=createRoom;$('join').onclick=()=>joinRoom($('codeInput').value);
 $('launch').onclick=()=>{if(!current||!balanced(current)){notice('Launch blocked: '+(current?launchBlockers(current).join(' · '):'ROOM NOT LOADED'));return}location.href='./online-battle.html#room='+room};
 $('ready').onclick=async()=>{if(!room||!role||!current)return;try{
