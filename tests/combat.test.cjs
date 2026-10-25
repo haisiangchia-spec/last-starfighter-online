@@ -137,10 +137,10 @@ test('finished matches are not silently reset on refresh',()=>{
  assert.match(init,/snap\.data\(\)\.phase==='ended'/);
  assert.doesNotMatch(init,/\['ended','finished'\]/);
 });
-test('guest waits for host when rematch still has stale ended snapshot',()=>{
+test('guest redirects to lobby on host-ended snapshot regardless of cached ready flags',()=>{
  const init=source.slice(source.indexOf('async function initialize()'),source.indexOf('let lastTurn='));
- assert.match(init,/Waiting for host to initialize rematch/);
- assert.match(init,/r\.hostReady&&r\.guestReady/);
+ assert.match(init,/if\(incoming\.phase==='ended'\)\{location\.replace\('\.\/index\.html#room='\+room\);return\}/);
+ assert.doesNotMatch(init,/Waiting for host to initialize rematch/);
 });
 test('constant speed orders require the exact permitted movement length',()=>{
  const ship=scenario().ships.host;
