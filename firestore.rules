@@ -58,7 +58,7 @@ service cloud.firestore {
           (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['submitted'])
            && resource.data.submitted[side()] == false
            && request.resource.data.submitted[side()] == true
-           && request.resource.data.submitted[side() == 'host' ? 'guest' : 'host'] == resource.data.submitted[side() == 'host' ? 'guest' : 'host'])
+           && request.resource.data.submitted.diff(resource.data.submitted).affectedKeys().hasOnly([side()]))
           || (resource.data.submitted.host == true && resource.data.submitted.guest == true && (!('host2' in resource.data.submitted) || resource.data.submitted.host2 == true) && (!('guest2' in resource.data.submitted) || resource.data.submitted.guest2 == true)
               && request.resource.data.turn == resource.data.turn + 1)
           || (host() && request.resource.data.phase == 'ended' && resource.data.phase != 'ended' && request.resource.data.turn == resource.data.turn)
