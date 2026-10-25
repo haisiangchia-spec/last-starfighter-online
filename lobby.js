@@ -20,6 +20,7 @@ function show(r){
  const host=team(r,'host'),guest=team(r,'guest'),equal=host.length===guest.length&&host.length>0,blockers=launchBlockers(r),ready=blockers.length===0;
  $('scenarioSettings').hidden=role!=='host';
  $('scenarioChoice').value=r.scenario||'duel';$('lobbyAsteroids').checked=!!r.asteroids;$('battleSeed').value=String(currentSeed(r));drawAsteroidPreview(!!r.asteroids,currentSeed(r));
+ $('seedStatus').textContent=String(currentSeed(r));
  $('scenarioStatus').textContent=(r.scenario==='swarm'?'KO-DAN SWARM (EXPERIMENTAL)':'GUNSTAR DUEL')+(r.asteroids?' · ASTEROIDS':' · CLEAR SPACE');
  $('launch').disabled=!ready;$('launch').textContent=ready?'LAUNCH ONLINE BATTLE · READY':'LAUNCH LOCKED · '+(equal?'WAITING FOR READY':'UNEVEN TEAMS');$('launch').title=ready?'All pilots ready to launch':blockers.join(' · ');$('launchHint').textContent=ready?'✓ ALL PILOTS READY · 1v1 OR 2v2 MISSION CAN START':'LAUNCH REQUIREMENTS: '+blockers.join(' · ');$('launchHint').className=ready?'ok':'wait';
  $('roomPanel').hidden=false;$('roomCode').textContent=room;
