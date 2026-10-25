@@ -13,7 +13,7 @@ const slotUid=(r,slot)=>r[slot==='host'?'hostUid':slot==='guest'?'guestUid':slot
 const slotReady=(r,slot)=>!!r[slot==='host'?'hostReady':slot==='guest'?'guestReady':slot+'Ready'];
 const sideOf=slot=>slot.startsWith('host')?'STAR LEAGUE':'KO-DAN';
 const team=(r,side)=>slots.filter(slot=>slot.startsWith(side)&&!!slotUid(r,slot));
-const launchBlockers=r=>{const h=team(r,'host'),g=team(r,'guest'),missing=[];if(!h.length||!g.length||h.length!==g.length)missing.push('NEED EQUAL TEAMS (CURRENTLY '+h.length+' VS '+g.length+')');if(h.length===2&&r.scenario==='swarm')missing.push('SWARM SUPPORTS 1v1 ONLY');for(const slot of [...h,...g])if(!slotReady(r,slot))missing.push((slot==='host'?'GS-01':slot==='host2'?'GS-02':slot==='guest'?'DF-01':'DF-02')+' NOT READY');return missing};
+const launchBlockers=r=>{const h=team(r,'host'),g=team(r,'guest'),missing=[];if(!h.length||!g.length||h.length!==g.length)missing.push('NEED EQUAL TEAMS (CURRENTLY '+h.length+' VS '+g.length+')');if(r.scenario==='swarm')missing.push('SWARM IS VS COMPUTER ONLY · SELECT DUEL');for(const slot of [...h,...g])if(!slotReady(r,slot))missing.push((slot==='host'?'GS-01':slot==='host2'?'GS-02':slot==='guest'?'DF-01':'DF-02')+' NOT READY');return missing};
 const balanced=r=>launchBlockers(r).length===0;
 function show(r){
  current=r;
@@ -21,7 +21,7 @@ function show(r){
  $('scenarioSettings').hidden=role!=='host';
  $('scenarioChoice').value=r.scenario||'duel';$('lobbyAsteroids').checked=!!r.asteroids;$('battleSeed').value=String(currentSeed(r));drawAsteroidPreview(!!r.asteroids,currentSeed(r));
  $('seedStatus').textContent=String(currentSeed(r));
- $('scenarioStatus').textContent=(r.scenario==='swarm'?'KO-DAN SWARM (EXPERIMENTAL)':'GUNSTAR DUEL')+(r.asteroids?' · ASTEROIDS':' · CLEAR SPACE');
+ $('scenarioStatus').textContent=('GUNSTAR DUEL')+(r.asteroids?' · ASTEROIDS':' · CLEAR SPACE');
  $('launch').disabled=!ready;$('launch').textContent=ready?'LAUNCH ONLINE BATTLE · READY':'LAUNCH LOCKED · '+(equal?'WAITING FOR READY':'UNEVEN TEAMS');$('launch').title=ready?'All pilots ready to launch':blockers.join(' · ');$('launchHint').textContent=ready?'✓ ALL PILOTS READY · 1v1 OR 2v2 MISSION CAN START':'LAUNCH REQUIREMENTS: '+blockers.join(' · ');$('launchHint').className=ready?'ok':'wait';
  $('roomPanel').hidden=false;$('roomCode').textContent=room;
  $('side').textContent=sideOf(role)+' · '+(role.endsWith('2')?'PILOT 2':'PILOT 1');
@@ -87,7 +87,7 @@ async function saveScenario(){
  if(role!=='host'||!room||!current)return;
  const button=$('saveScenario');button.disabled=true;
  try{
-  const asteroid=$('lobbyAsteroids').checked,scenario=$('scenarioChoice').value,seed=Number($('battleSeed').value);
+  const asteroid=$('lobbyAsteroids').checked,scenario='duel',seed=Number($('battleSeed').value);
   if(!Number.isSafeInteger(seed)||seed<1||seed>4294967295)throw Error('Seed must be a whole number between 1 and 4294967295.');
   await updateDoc(doc(db,'rooms',room),{scenario,asteroids:asteroid,seed,hostReady:false,guestReady:false,host2Ready:false,guest2Ready:false});
   notice('SAVED: '+(asteroid?'ASTEROID FIELD ENABLED ('+asteroidPositions(seed).length+' ROCKS)':'CLEAR SPACE')+' · SEED '+seed+'. All pilots must ready up again.');
