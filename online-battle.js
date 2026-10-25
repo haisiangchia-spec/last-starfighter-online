@@ -11,7 +11,7 @@ const moves=['hold','F','L','R'];const NQ=19,NR=13;
 function parsePlan(plan){if(typeof plan!=='string'||!/^[FLR]{0,5}$/.test(plan))throw Error('Movement must contain 0–5 F/L/R steps.');if([...plan].filter(x=>x!=='F').length>3)throw Error('Maximum three turns per round.');return [...plan]}
 function moveLimit(s){let n=Math.max(0,5-Math.max(Math.floor((s.engine||0)/2),Math.floor((s.hull||0)/4)));if((s.half||0)>=3)n=0;else if(s.half===2)n=n>=3?1:0;else if(s.half===1)n=Math.ceil(n/2);if(s.constant!==null&&s.constant!==undefined)n=Math.min(n,s.constant);return n}
 function turnLimit(s){return Math.max(0,3-Math.max(Math.floor((s.engine||0)/4),Math.floor((s.hull||0)/8)))}
-function predict(ship,plan){const s={...ship};const steps=parsePlan(plan);if(steps.length>moveLimit(s))throw Error('Engine damage limits movement to '+moveLimit(s)+' steps.');if(steps.filter(x=>x!=='F').length>turnLimit(s))throw Error('System damage limits turns to '+turnLimit(s)+'.');if((s.pilot||0)>=6&&steps.length)throw Error('Pilot incapacitated.');if(s.restrict==='noL'&&steps.includes('L')||s.restrict==='noR'&&steps.includes('R'))throw Error('Steering restriction prevents this turn.');if(s.restrict?.startsWith('lock')&&steps.some(x=>x!==({lockL:'L',lockR:'R',lockF:'F'}[s.restrict])))throw Error('Steering locked to '+s.restrict+'.');if(s.constant!==null&&s.constant!==undefined&&steps.length!==Math.min(s.constant,moveLimit(s)))throw Error('Constant-speed damage requires '+Math.min(s.constant,moveLimit(s))+' steps.');for(const cmd of steps){const [dq,dr]=dirs[s.d];s.q+=dq;s.r+=dr;if(cmd==='L')s.d=(s.d+5)%6;if(cmd==='R')s.d=(s.d+1)%6;if(s.q<0||s.q>=NQ||s.r<0||s.r>=NR)throw Error('Movement would leave the tactical map.')}return s}
+function predict(ship,plan){const s={...ship};const steps=parsePlan(plan);if(steps.length>moveLimit(s))throw Error('Engine damage limits movement to '+moveLimit(s)+' steps.');if(steps.filter(x=>x!=='F').length>turnLimit(s))throw Error('System damage limits turns to '+turnLimit(s)+'.');if((s.pilot||0)>=6&&steps.length)throw Error('Pilot incapacitated.');if(s.unconsciousPilot===1&&steps.length)throw Error('Pilot unconscious.');if(s.restrict==='noL'&&steps.includes('L')||s.restrict==='noR'&&steps.includes('R'))throw Error('Steering restriction prevents this turn.');if(s.restrict?.startsWith('lock')&&steps.some(x=>x!==({lockL:'L',lockR:'R',lockF:'F'}[s.restrict])))throw Error('Steering locked to '+s.restrict+'.');if(s.constant!==null&&s.constant!==undefined&&steps.length!==Math.min(s.constant,moveLimit(s)))throw Error('Constant-speed damage requires '+Math.min(s.constant,moveLimit(s))+' steps.');for(const cmd of steps){const [dq,dr]=dirs[s.d];s.q+=dq;s.r+=dr;if(cmd==='L')s.d=(s.d+5)%6;if(cmd==='R')s.d=(s.d+1)%6;if(s.q<0||s.q>=NQ||s.r<0||s.r>=NR)throw Error('Movement would leave the tactical map.')}return s}
 const facingNames=['E','SE','SW','W','NW','NE'];
 function facingToTarget(a,b){const dq=b.q-a.q,dr=b.r-a.r;let best=0,score=-Infinity;for(let i=0;i<6;i++){const [x,y]=dirs[i],v=(2*x+y)*dq+(x+2*y)*dr;if(v>score){score=v;best=i}}return best}
 function inArc(a,b){const t=facingToTarget(a,b);return ((t-a.d+6)%6)<=1||((a.d-t+6)%6)<=1}
@@ -67,16 +67,15 @@ function apply(s,orders){
  function arcAllows(ship,enemy,arc){const relative=(facingToTarget(ship,enemy)-ship.d+6)%6;return ({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[arc]?.includes(relative)===true}
  for(const side of ['host','guest']){
   const ship=out.ships[side],enemySide=side==='host'?'guest':'host',enemy=out.ships[enemySide],o=orders[side],label=side==='host'?'STAR LEAGUE':'KO-DAN';
-  const selection=o.fire??'laser';
+  const selection=o.fire??'laser';if(ship.unconsciousGunner===1||(side==='guest'&&ship.unconsciousPilot===1)){events.push(label+' CREW UNCONSCIOUS — WEAPONS DISABLED');continue}
   if(selection==='guard'){if((o.plan||'').length){events.push(label+' RECHARGE REQUIRES HOLD POSITION');continue}ship.power=Math.min(20,(ship.power??20)+5);events.push(label+' RECHARGES +5 POWER');continue}
   const kinds=selection.split('+').filter(k=>weaponData[k]);
-  if(!kinds.length){events.push(label+' HOLDS FIRE');continue}
+  if(!kinds.length){if((o.plan||'').length&&ship.power>0){ship.power--;events.push(label+' MOVEMENT COSTS 1 POWER')}else events.push(label+' HOLDS POSITION / FIRE');continue}
   const cap=Math.max(1,3-Math.max(Math.floor((ship.engine||0)/4),Math.floor((ship.hull||0)/8)));
   const enabled=kinds.slice(0,cap);
   if(kinds.length>cap)events.push(label+' SYSTEM DAMAGE: ONLY '+cap+' WEAPON GROUPS POWERED');
   if((ship.power??20)<1){events.push(label+' INSUFFICIENT POWER');continue}
   // Local game charges one point for an active turn, not one point per weapon.
-  if(!(o.plan||'').length&&!kinds.length)continue;
   ship.power=Math.max(0,ship.power-1);
   let shotIndex=0;
   for(const kind of enabled){
@@ -92,12 +91,15 @@ function apply(s,orders){
     shots.push({side,kind,hit,from:{q:ship.q,r:ship.r},to:{q:enemy.q,r:enemy.r}});
     if(hit)hits[enemySide].push(kind);
     events.push(label+' '+kind.toUpperCase()+' '+(i+1)+' 2D6 '+d1+'+'+d2+'='+ (d1+d2)+' VS '+target+': '+(hit?'HIT':'MISS'));
-    if(kind==='missile')ship.missiles--;
+    if(kind==='missile'){ship.missiles--;events.push(label+' PHOTON MISSILE EXPENDED · '+ship.missiles+' REMAINING')}
    }
   }
  }
  for(const side of ['host','guest'])for(let i=0;i<hits[side].length;i++)damageShip(out.ships[side],hits[side][i],s.turn+i*17,side,events);
- for(const side of ['host','guest']){const ship=out.ships[side],o=orders[side],active=(o.plan||'').length>0||(o.fire&&o.fire!=='guard'&&o.fire!=='none');if(active&&o.fire==='none'&&ship.power>0)ship.power--;if(ship.life){ship.life--;events.push((side==='host'?'STAR LEAGUE':'KO-DAN')+' LIFE SUPPORT '+ship.life+' TURNS REMAIN');if(ship.life===0)ship.pilot=6}if(ship.nextHalf){ship.half=ship.nextHalf;ship.nextHalf=0}else ship.half=0;if(ship.nextConstant){ship.constant=(o.plan||'').length;ship.nextConstant=0}else ship.constant=null;if(ship.nextStabilizer){ship.stabilizer=1;ship.nextStabilizer=0}else ship.stabilizer=0;if(ship.nextRestrict){const choices=['lockL','lockR','lockF','noL','noR'];ship.restrict=choices[roll(s.turn*333+(side==='host'?11:37))%choices.length];ship.nextRestrict=0}else ship.restrict=null}
+ for(const side of ['host','guest']){const ship=out.ships[side],o=orders[side];if(ship.life){ship.life--;events.push((side==='host'?'STAR LEAGUE':'KO-DAN')+' LIFE SUPPORT '+ship.life+' TURNS REMAIN');if(ship.life===0)ship.pilot=6}if(ship.nextStabilizer){ship.stabilizer=1;ship.nextStabilizer=0;ship.restrict=null;ship.nextRestrict=0;events.push(side.toUpperCase()+' STABILIZER DAMAGE OVERRIDES STEERING RESTRICTION')}else{ship.stabilizer=0;if(ship.nextRestrict){const choices=['lockL','lockF','lockR','noL','noR'];ship.restrict=choices[(roll(s.turn*333+(side==='host'?11:37))-1)%choices.length];ship.nextRestrict=0}else ship.restrict=null}
+if(ship.nextConstant&&ship.nextHalf){ship.deferredConstant=true;ship.deferredSpeedTarget=(o.plan||'').length;ship.deferredSpeedTurns=2;ship.nextConstant=0;events.push(side.toUpperCase()+' SPEED CONFLICT: HALF SPEED FOR TWO TURNS BEFORE CONSTANT SPEED')}
+else if(ship.nextConstant){ship.constant=(o.plan||'').length;ship.nextConstant=0}else ship.constant=null;
+if(ship.deferredSpeedTurns>0){ship.half=Math.max(1,ship.nextHalf||0);ship.deferredSpeedTurns--;ship.nextHalf=0}else{ship.half=ship.nextHalf||0;ship.nextHalf=0;if(ship.deferredConstant&&ship.deferredSpeedTarget!==undefined&&ship.deferredSpeedTarget!==null){ship.constant=ship.deferredSpeedTarget;ship.deferredConstant=false;ship.deferredSpeedTarget=null}}}
  const a=out.ships.host,b=out.ships.guest;
  out.winner=(a.dead||a.pilot>=6)&&(b.dead||b.pilot>=6)?'DRAW':a.dead||a.pilot>=6?'KO-DAN':b.dead||b.pilot>=6?'STAR LEAGUE':null;
  out.lastVolley={turn:s.turn,shots};out.turn++;out.phase=out.winner?'finished':'orders';out.submitted={host:false,guest:false};
