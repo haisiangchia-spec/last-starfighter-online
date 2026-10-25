@@ -20,6 +20,21 @@ const asteroidHexes=[[3,2],[4,3],[5,5],[3,6],[5,1],[6,6]];const rockKey=(q,r)=>q
 function hexLine(a,b){const n=distance(a,b),line=[];for(let i=1;i<n;i++){const t=i/n,x=a.q+(b.q-a.q)*t,z=a.r+(b.r-a.r)*t,y=-x-z;let q=Math.round(x),r=Math.round(z),cy=Math.round(y);const dx=Math.abs(q-x),dy=Math.abs(cy-y),dz=Math.abs(r-z);if(dx>dy&&dx>dz)q=-cy-r;else if(dy>dz)cy=-q-r;else r=-q-cy;line.push([q,r])}return line}
 function blocked(a,b,rocks){return hexLine(a,b).some(([q,r])=>rocks.has(rockKey(q,r)))}
 const initial=(asteroids=false)=>({asteroids:asteroids?asteroidHexes:[],turn:1,ships:{host:{q:1,r:4,d:0,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false},guest:{q:7,r:4,d:3,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false}},submitted:{host:false,guest:false},phase:'orders',log:['Skirmish initiated. Both pilots must submit orders.'],winner:null});
+
+// Swarm mode keeps a single Gunstar under host control and fourteen individual
+// Ko-Dan contacts under guest control. Each contact has its own sealed vector.
+const isSwarm=s=>s?.scenario==='swarm';
+const swarmIds=()=>Array.from({length:14},(_,i)=>'SW-'+String(i+1).padStart(2,'0'));
+const newSwarmShip=(i)=>({q:5+Math.floor(i/7)*2,r:1+(i%7),d:3,hp:20,power:20,missiles:0,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:true,missileLost:true,dead:false});
+function initialSwarm(asteroids=false){
+ const s=initial(asteroids);s.scenario='swarm';s.ships.host={...s.ships.host,q:1,r:4,d:0};
+ s.ships.guest=newSwarmShip(0);s.fleet=Object.fromEntries(swarmIds().map((id,i)=>[id,newSwarmShip(i)]));
+ s.log=['SWARM MISSION: Gunstar versus fourteen Ko-Dan contacts. Guest plots each surviving fighter.'];
+ return s;
+}
+function enemyContacts(s,side){if(!isSwarm(s))return [s.ships[side==='host'?'guest':'host']];return side==='host'?Object.values(s.fleet||{}).filter(v=>!v.dead):[s.ships.host]}
+function activeFleet(s){return Object.entries(s.fleet||{}).filter(([,ship])=>!ship.dead)}
+
 const battleRef=()=>doc(db,'rooms',room,'combat','state');
 const orderRef=(turn,side)=>doc(db,'rooms',room,'combatOrders',`${turn}_${side}`);
 function note(msg){$('status').textContent=msg}
@@ -30,6 +45,7 @@ function roll(seed){let x=(seed>>>0)||1;x^=x<<13;x^=x>>>17;x^=x<<5;return 1+(x>>
 function damageShip(ship,kind,turn,side,events,collisionTable=null){const salt=side==='host'?19:47;const red=roll(turn*1009+salt),white=roll(turn*3001+salt),table=collisionTable??Math.max(1,Math.min(6,red+(kind==='particle'?1:kind==='missile'?-1:0))),code=damageRows[table-1][white-1];events.push(`${side==='host'?'STAR LEAGUE':'KO-DAN'} DAMAGE RED ${red} WHITE ${white}: ${code}`);for(const part of code.split(',')){const c=part[0],n=Number(part.slice(1))||1;if(c==='F')ship.hull=(ship.hull||0)+n;if(c==='E')ship.engine=(ship.engine||0)+n;if(c==='P')ship.power=Math.max(0,(ship.power??20)-n);if(c==='T')ship.aim=(ship.aim||0)+1;if(c==='W')ship.pilot=(ship.pilot||0)+1;if(c==='K')ship.pilot=6;if(c==='D')ship.dead=true;if(c==='X'){const z=roll(turn*511+salt);if(z<=2)ship.laserLoss=(ship.laserLoss||0)+1;else if(z<=4)ship.particleLost=true;else ship.missileLost=true}if(c==='L')ship.life=ship.life||6;if('RSHN'.includes(c)){ship.pendingEffects=[...(ship.pendingEffects||[]),c]}}ship.hp=Math.max(0,20-(ship.hull||0));if((ship.hull||0)>=20||(ship.engine||0)>=10||(ship.pilot||0)>=6)ship.dead=true;if(ship.dead)ship.hp=0}
 function apply(s,orders){
  const out=structuredClone(s),events=[`TURN ${s.turn}`];
+ if(isSwarm(s))return applySwarm(s,orders);
  for(const side of ['host','guest']){
   const ship=out.ships[side],o=orders[side],plan=o.plan??(o.move==='hold'?'':o.move);
   try{const next=predict(ship,plan);Object.assign(ship,next);events.push(`${side==='host'?'STAR LEAGUE':'KO-DAN'} VECTOR ${plan||'HOLD'} · FACING ${ship.d}`);
@@ -86,7 +102,57 @@ function apply(s,orders){
  out.log=[...events,...s.log].slice(0,90);if(out.winner)out.log.unshift(`BATTLE OVER: ${out.winner}`);
  return out;
 }
-let visualEffects=null;function draw(positions=null){const c=$('map'),ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);const R=28,OX=100,OY=48;const point=(q,r)=>[OX+R*Math.sqrt(3)*(q+r/2),OY+R*1.5*r];for(let q=0;q<9;q++)for(let r=0;r<9;r++){const [x,y]=point(q,r);ctx.beginPath();for(let i=0;i<6;i++){const a=Math.PI/180*(60*i-30),px=x+R*Math.cos(a),py=y+R*Math.sin(a);i?ctx.lineTo(px,py):ctx.moveTo(px,py)}ctx.closePath();ctx.strokeStyle='#1e4d63';ctx.stroke()}if(!state)return;for(const [q,r] of (state.asteroids||[])){const [x,y]=point(q,r);ctx.save();ctx.translate(x,y);ctx.beginPath();ctx.moveTo(-16,-9);ctx.lineTo(-7,-19);ctx.lineTo(11,-15);ctx.lineTo(20,-1);ctx.lineTo(10,16);ctx.lineTo(-12,14);ctx.closePath();ctx.fillStyle='#61472f';ctx.strokeStyle='#ffc65b';ctx.lineWidth=1.7;ctx.shadowColor='#d5964c';ctx.shadowBlur=9;ctx.fill();ctx.stroke();ctx.restore()}for(const side of ['host','guest']){const sh=state.ships[side],pos=positions?.[side]||sh,[x,y]=point(pos.q,pos.r);const color=side==='host'?'#52f5ff':'#ff667d';ctx.save();ctx.translate(x,y);ctx.rotate((pos.d??(side==='host'?0:3))*Math.PI/3);ctx.shadowColor=color;ctx.shadowBlur=13;ctx.beginPath();ctx.moveTo(R*.68,0);ctx.lineTo(-R*.43,-R*.43);ctx.lineTo(-R*.22,0);ctx.lineTo(-R*.43,R*.43);ctx.closePath();ctx.fillStyle=side==='host'?'#1a768c':'#922b4c';ctx.fill();ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.stroke();ctx.restore();ctx.fillStyle=color;ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.fillText(side==='host'?'GS-01':'DF-01',x,y-R*.78);ctx.font='11px monospace';ctx.fillText(`${sh.hp}/20`,x,y+R*.95);ctx.textAlign='left'}if(visualEffects){const {shots,progress}=visualEffects;const shotCount=shots.length;const P=(q,r)=>[OX+R*Math.sqrt(3)*(q+r/2),OY+R*1.5*r];for(const [shotIndex,shot] of shots.entries()){const shotProgress=Math.min(1,Math.max(0,progress*shotCount-shotIndex));if(shotProgress<=0||shotProgress>=1)continue;const [ax,ay]=P(shot.from.q,shot.from.r),[bx,by]=P(shot.to.q,shot.to.r),dx=bx-ax,dy=by-ay,dist=Math.hypot(dx,dy)||1,nx=-dy/dist,ny=dx/dist,offset=shot.hit?0:Math.min(32,dist*.16),tx=bx+nx*offset,ty=by+ny*offset,color=shot.kind==='laser'?'#55f7ff':shot.kind==='particle'?'#ffc65b':'#ff5c77';ctx.save();ctx.strokeStyle=color;ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=22;if(shot.kind==='missile'){const t=Math.min(1,Math.max(0,(shotProgress-.05)/.75));const x=ax+(tx-ax)*t,y=ay+(ty-ay)*t;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(x,y);ctx.stroke();ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fill()}else if(shotProgress<.78){ctx.globalAlpha=shot.kind==='laser'?(Math.sin(shotProgress*70)>-.3?1:.25):.85;ctx.lineWidth=shot.kind==='particle'?6:3;ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(tx,ty);ctx.stroke()}if(shot.hit&&shotProgress>.72){ctx.globalAlpha=Math.max(0,1-(shotProgress-.72)/.28);ctx.beginPath();ctx.arc(bx,by,7+(shotProgress-.72)*65,0,Math.PI*2);ctx.strokeStyle='#fff1b6';ctx.lineWidth=3;ctx.stroke()}ctx.restore()}} }
+
+function applySwarm(s,orders){
+ const out=structuredClone(s),events=['TURN '+s.turn+' / SWARM'],shots=[],rocks=rocksFor(out);
+ const gun=out.ships.host,guest=orders.guest,host=orders.host;
+ function travel(ship,plan,id,side){
+  try{const next=predict(ship,plan||'');Object.assign(ship,next);events.push(id+' VECTOR '+(plan||'HOLD'));
+   const walker={...ship}; // Collision checks are resolved on the plotted route below.
+  }catch(e){events.push(id+' INVALID VECTOR: '+e.message)}
+ }
+ travel(gun,host.plan,'GS-01','host');
+ for(const [id,ship] of activeFleet(out))travel(ship,guest.fleetPlans?.[id]||'',id,'guest');
+ const targets=activeFleet(out).map(([id,ship])=>({id,ship}));
+ function shoot(attacker,defender,id,kind,index,side,arc=0){
+  if(attacker.dead||defender.dead)return;
+  const range=distance(attacker,defender),max=kind==='laser'?10:kind==='particle'?9:8;
+  if(range>max||blocked(attacker,defender,rocks)||!arcAllowsSwarm(attacker,defender,arc))return;
+  const base=kind==='laser'?(side==='guest'?4:3):kind==='particle'?4:5;
+  const a=roll(s.turn*733+index*79+(side==='host'?17:41)),b=roll(s.turn*1181+index*103+(side==='host'?23:53));
+  const target=base+range-1+Math.min(4,attacker.aim||0),hit=a+b>=target;
+  shots.push({side,kind,hit,from:{q:attacker.q,r:attacker.r},to:{q:defender.q,r:defender.r}});
+  events.push(id+' '+kind.toUpperCase()+' → '+(side==='host'?targets.find(x=>x.ship===defender)?.id||'SW':'GS-01')+': '+a+'+'+b+' VS '+target+' '+(hit?'HIT':'MISS'));
+  if(hit)damageShip(defender,side==='guest'?'laser':kind,s.turn+index*31,side==='host'?'guest':'host',events);
+ }
+ const gunFire=host.fire==='guard'?[]:(host.fire||'laser').split('+');
+ if(host.fire==='guard'&&!(host.plan||'').length){gun.power=Math.min(20,gun.power+5);events.push('GS-01 RECHARGES +5')}
+ else if(gun.power>0&&!gun.dead){
+  gun.power--;
+  let idx=0;
+  for(const kind of gunFire){if(kind==='missile'&&(!gun.missiles||gun.missileLost)||kind==='particle'&&gun.particleLost)continue;
+   const n=kind==='laser'?Math.max(0,2-(gun.laserLoss||0)):1;
+   for(let i=0;i<n;i++){const available=targets.filter(t=>!t.ship.dead&&distance(gun,t.ship)<=(kind==='laser'?10:kind==='particle'?9:8)&&!blocked(gun,t.ship,rocks)&&arcAllowsSwarm(gun,t.ship,kind==='laser'?Number(host.arc??0):0));if(!available.length)break;
+    available.sort((a,b)=>distance(gun,a.ship)-distance(gun,b.ship));shoot(gun,available[0].ship,'GS-01',kind,idx++,'host',kind==='laser'?Number(host.arc??0):0);
+    if(kind==='missile')gun.missiles--;
+   }
+  }
+ }
+ // Guest commands one laser volley per surviving swarm fighter.
+ let i=0;
+ for(const [id,ship] of activeFleet(out)){
+  if(ship.power<=0)continue;
+  ship.power=Math.max(0,ship.power-1);
+  shoot(ship,gun,id,'laser',i++,'guest',0);
+ }
+ out.winner=gun.dead?'KO-DAN':activeFleet(out).length===0?'STAR LEAGUE':null;
+ out.lastVolley={turn:s.turn,shots};out.turn++;out.phase=out.winner?'finished':'orders';out.submitted={host:false,guest:false};
+ out.log=[...(out.winner?['BATTLE OVER: '+out.winner]:[]),...events,...s.log].slice(0,120);
+ return out;
+}
+function arcAllowsSwarm(ship,enemy,arc){const relative=(facingToTarget(ship,enemy)-ship.d+6)%6;return ({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[arc]?.includes(relative)===true}
+
+let visualEffects=null;function draw(positions=null){const c=$('map'),ctx=c.getContext('2d');ctx.clearRect(0,0,c.width,c.height);const R=28,OX=100,OY=48;const point=(q,r)=>[OX+R*Math.sqrt(3)*(q+r/2),OY+R*1.5*r];for(let q=0;q<9;q++)for(let r=0;r<9;r++){const [x,y]=point(q,r);ctx.beginPath();for(let i=0;i<6;i++){const a=Math.PI/180*(60*i-30),px=x+R*Math.cos(a),py=y+R*Math.sin(a);i?ctx.lineTo(px,py):ctx.moveTo(px,py)}ctx.closePath();ctx.strokeStyle='#1e4d63';ctx.stroke()}if(!state)return;for(const [q,r] of (state.asteroids||[])){const [x,y]=point(q,r);ctx.save();ctx.translate(x,y);ctx.beginPath();ctx.moveTo(-16,-9);ctx.lineTo(-7,-19);ctx.lineTo(11,-15);ctx.lineTo(20,-1);ctx.lineTo(10,16);ctx.lineTo(-12,14);ctx.closePath();ctx.fillStyle='#61472f';ctx.strokeStyle='#ffc65b';ctx.lineWidth=1.7;ctx.shadowColor='#d5964c';ctx.shadowBlur=9;ctx.fill();ctx.stroke();ctx.restore()}for(const side of ['host','guest']){if(side==='guest'&&isSwarm(state))continue;const sh=state.ships[side],pos=positions?.[side]||sh,[x,y]=point(pos.q,pos.r);const color=side==='host'?'#52f5ff':'#ff667d';ctx.save();ctx.translate(x,y);ctx.rotate((pos.d??(side==='host'?0:3))*Math.PI/3);ctx.shadowColor=color;ctx.shadowBlur=13;ctx.beginPath();ctx.moveTo(R*.68,0);ctx.lineTo(-R*.43,-R*.43);ctx.lineTo(-R*.22,0);ctx.lineTo(-R*.43,R*.43);ctx.closePath();ctx.fillStyle=side==='host'?'#1a768c':'#922b4c';ctx.fill();ctx.strokeStyle=color;ctx.lineWidth=1.8;ctx.stroke();ctx.restore();ctx.fillStyle=color;ctx.font='bold 12px monospace';ctx.textAlign='center';ctx.fillText(side==='host'?'GS-01':'DF-01',x,y-R*.78);ctx.font='11px monospace';ctx.fillText(`${sh.hp}/20`,x,y+R*.95);ctx.textAlign='left'}if(isSwarm(state)){for(const [id,sh] of Object.entries(state.fleet||{})){if(sh.dead)continue;const pos=positions?.[id]||sh,[x,y]=point(pos.q,pos.r);ctx.save();ctx.translate(x,y);ctx.rotate((pos.d||0)*Math.PI/3);ctx.beginPath();ctx.moveTo(15,0);ctx.lineTo(-11,-9);ctx.lineTo(-7,0);ctx.lineTo(-11,9);ctx.closePath();ctx.fillStyle='#922b4c';ctx.strokeStyle='#ff667d';ctx.lineWidth=1.5;ctx.fill();ctx.stroke();ctx.restore();ctx.fillStyle='#ff9aaa';ctx.font='10px monospace';ctx.textAlign='center';ctx.fillText(id,x,y-18);ctx.textAlign='left'}}if(visualEffects){const {shots,progress}=visualEffects;const shotCount=shots.length;const P=(q,r)=>[OX+R*Math.sqrt(3)*(q+r/2),OY+R*1.5*r];for(const [shotIndex,shot] of shots.entries()){const shotProgress=Math.min(1,Math.max(0,progress*shotCount-shotIndex));if(shotProgress<=0||shotProgress>=1)continue;const [ax,ay]=P(shot.from.q,shot.from.r),[bx,by]=P(shot.to.q,shot.to.r),dx=bx-ax,dy=by-ay,dist=Math.hypot(dx,dy)||1,nx=-dy/dist,ny=dx/dist,offset=shot.hit?0:Math.min(32,dist*.16),tx=bx+nx*offset,ty=by+ny*offset,color=shot.kind==='laser'?'#55f7ff':shot.kind==='particle'?'#ffc65b':'#ff5c77';ctx.save();ctx.strokeStyle=color;ctx.fillStyle=color;ctx.shadowColor=color;ctx.shadowBlur=22;if(shot.kind==='missile'){const t=Math.min(1,Math.max(0,(shotProgress-.05)/.75));const x=ax+(tx-ax)*t,y=ay+(ty-ay)*t;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(x,y);ctx.stroke();ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fill()}else if(shotProgress<.78){ctx.globalAlpha=shot.kind==='laser'?(Math.sin(shotProgress*70)>-.3?1:.25):.85;ctx.lineWidth=shot.kind==='particle'?6:3;ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(tx,ty);ctx.stroke()}if(shot.hit&&shotProgress>.72){ctx.globalAlpha=Math.max(0,1-(shotProgress-.72)/.28);ctx.beginPath();ctx.arc(bx,by,7+(shotProgress-.72)*65,0,Math.PI*2);ctx.strokeStyle='#fff1b6';ctx.lineWidth=3;ctx.stroke()}ctx.restore()}} }
 function animateTurn(before,after){
  if(animation)cancelAnimationFrame(animation);
  visualEffects=null;
@@ -95,7 +161,7 @@ function animateTurn(before,after){
   const elapsed=now-start;
   if(elapsed<moveDuration){
    const t=Math.min(1,elapsed/moveDuration),ease=t*t*(3-2*t),positions={};
-   for(const side of ['host','guest']){const a=before.ships[side],b=after.ships[side];positions[side]={q:a.q+(b.q-a.q)*ease,r:a.r+(b.r-a.r)*ease,d:t<.5?a.d:b.d}}
+   for(const side of ['host','guest']){if(side==='guest'&&isSwarm(after))continue;const a=before.ships[side],b=after.ships[side];positions[side]={q:a.q+(b.q-a.q)*ease,r:a.r+(b.r-a.r)*ease,d:t<.5?a.d:b.d}}if(isSwarm(after))for(const [id,b] of Object.entries(after.fleet||{})){const a=before.fleet?.[id]||b;positions[id]={q:a.q+(b.q-a.q)*ease,r:a.r+(b.r-a.r)*ease,d:t<.5?a.d:b.d}}
    draw(positions);
   }else if(shots.length&&elapsed<moveDuration+fireDuration){
    visualEffects={shots,progress:Math.min(1,(elapsed-moveDuration)/fireDuration)};draw();
