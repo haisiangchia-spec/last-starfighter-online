@@ -3,36 +3,49 @@ service cloud.firestore {
   match /databases/{database}/documents {
     match /rooms/{roomId} {
       function signedIn() { return request.auth != null; }
-      function member() { return signedIn() && (resource.data.hostUid == request.auth.uid || resource.data.guestUid == request.auth.uid); }
+      function member() { return signedIn() && (resource.data.hostUid == request.auth.uid || resource.data.guestUid == request.auth.uid || resource.data.host2Uid == request.auth.uid || resource.data.guest2Uid == request.auth.uid); }
       allow create: if signedIn() && roomId.matches('[A-HJ-NP-Z2-9]{8}')
-        && request.resource.data.keys().hasOnly(['hostUid','guestUid','hostReady','guestReady','createdAt','scenario','asteroids'])
-        && request.resource.data.hostUid == request.auth.uid && request.resource.data.guestUid == null
+        && request.resource.data.keys().hasOnly(['hostUid','guestUid','host2Uid','guest2Uid','hostReady','guestReady','host2Ready','guest2Ready','createdAt','scenario','asteroids'])
+        && request.resource.data.hostUid == request.auth.uid && request.resource.data.guestUid == null && request.resource.data.host2Uid == null && request.resource.data.guest2Uid == null && request.resource.data.host2Ready == false && request.resource.data.guest2Ready == false
         && request.resource.data.hostReady == false && request.resource.data.guestReady == false
         && request.resource.data.scenario == 'duel' && request.resource.data.asteroids == false;
       allow get: if signedIn();
       allow list: if false;
       allow update: if signedIn() && (
-        (resource.data.guestUid == null && resource.data.hostUid != request.auth.uid
-         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guestUid'])
-         && request.resource.data.guestUid == request.auth.uid)
+        (resource.data.hostUid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['scenario','asteroids','hostReady','guestReady','host2Ready','guest2Ready'])
+          && request.resource.data.scenario in ['duel','swarm']
+          && request.resource.data.asteroids is bool
+          && request.resource.data.hostReady == false && request.resource.data.guestReady == false
+          && request.resource.data.host2Ready == false && request.resource.data.guest2Ready == false)
         || (resource.data.hostUid == request.auth.uid
-         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['scenario','asteroids','hostReady','guestReady'])
-         && request.resource.data.scenario in ['duel','swarm']
-         && request.resource.data.asteroids is bool
-         && request.resource.data.hostReady == false && request.resource.data.guestReady == false)
-        || (resource.data.hostUid == request.auth.uid
-         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostReady'])
-         && request.resource.data.hostReady is bool)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostReady'])
+          && request.resource.data.hostReady is bool)
         || (resource.data.guestUid == request.auth.uid
-         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guestReady'])
-         && request.resource.data.guestReady is bool)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guestReady'])
+          && request.resource.data.guestReady is bool)
+        || (resource.data.host2Uid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['host2Ready'])
+          && request.resource.data.host2Ready is bool)
+        || (resource.data.guest2Uid == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guest2Ready'])
+          && request.resource.data.guest2Ready is bool)
+        || (resource.data.guestUid == null && resource.data.hostUid != request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guestUid'])
+          && request.resource.data.guestUid == request.auth.uid)
+        || (resource.data.host2Uid == null && resource.data.hostUid != request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['host2Uid'])
+          && request.resource.data.host2Uid == request.auth.uid)
+        || (resource.data.guest2Uid == null && resource.data.hostUid != request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guest2Uid'])
+          && request.resource.data.guest2Uid == request.auth.uid)
       );
       allow delete: if false;
       match /combat/{battleId} {
         function roomData() { return get(/databases/$(database)/documents/rooms/$(roomId)).data; }
-        function member() { return request.auth != null && (roomData().hostUid == request.auth.uid || roomData().guestUid == request.auth.uid); }
+        function member() { return request.auth != null && (roomData().hostUid == request.auth.uid || roomData().guestUid == request.auth.uid || roomData().host2Uid == request.auth.uid || roomData().guest2Uid == request.auth.uid); }
         function host() { return request.auth != null && roomData().hostUid == request.auth.uid; }
-        function side() { return host() ? 'host' : 'guest'; }
+        function side() { return host() ? 'host' : roomData().guestUid == request.auth.uid ? 'guest' : roomData().host2Uid == request.auth.uid ? 'host2' : 'guest2'; }
         allow read: if member();
         allow create: if member() && host() && battleId == 'state';
         // Prototype: clients resolve turns. Production must move authoritative writes to backend.
@@ -40,8 +53,8 @@ service cloud.firestore {
           (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['submitted'])
            && resource.data.submitted[side()] == false
            && request.resource.data.submitted[side()] == true
-           && request.resource.data.submitted[side() == 'host' ? 'guest' : 'host'] == resource.data.submitted[side() == 'host' ? 'guest' : 'host'])
-          || (resource.data.submitted.host == true && resource.data.submitted.guest == true
+           && request.request.resource.data.diff(resource.data).affectedKeys().hasOnly(['submitted']))
+          || (resource.data.submitted.host == true && resource.data.submitted.guest == true && (!('host2' in resource.data.submitted) || resource.data.submitted.host2 == true) && (!('guest2' in resource.data.submitted) || resource.data.submitted.guest2 == true)
               && request.resource.data.turn == resource.data.turn + 1)
           || (host() && request.resource.data.phase == 'ended' && resource.data.phase != 'ended' && request.resource.data.turn == resource.data.turn)
           || (host() && resource.data.phase == 'ended' && request.resource.data.phase == 'orders' && request.resource.data.turn == 1)
@@ -50,8 +63,8 @@ service cloud.firestore {
       }
       match /combatOrders/{orderId} {
         function roomData() { return get(/databases/$(database)/documents/rooms/$(roomId)).data; }
-        function side() { return roomData().hostUid == request.auth.uid ? 'host' : 'guest'; }
-        function member() { return request.auth != null && (roomData().hostUid == request.auth.uid || roomData().guestUid == request.auth.uid); }
+        function side() { return roomData().hostUid == request.auth.uid ? 'host' : roomData().guestUid == request.auth.uid ? 'guest' : roomData().host2Uid == request.auth.uid ? 'host2' : 'guest2'; }
+        function member() { return request.auth != null && (roomData().hostUid == request.auth.uid || roomData().guestUid == request.auth.uid || roomData().host2Uid == request.auth.uid || roomData().guest2Uid == request.auth.uid); }
         function battle() { return get(/databases/$(database)/documents/rooms/$(roomId)/combat/state).data; }
         allow get: if member() && (orderId == (string(battle().turn) + '_' + side()) || (battle().submitted.host == true && battle().submitted.guest == true));
         allow list: if false;
