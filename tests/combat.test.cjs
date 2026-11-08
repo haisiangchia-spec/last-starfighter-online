@@ -355,23 +355,23 @@ test('both players render the same server-provided asteroid coordinates',()=>{
  assert.match(source,/for\(const asteroid of \(state\.asteroids\|\|\[\]\)\)/);
 });
 
-test('online asteroid generation exactly follows the local 1984-seed 22-attempt algorithm',()=>{
- const s=c.initial(true);
- let rng=1984;const random=()=>{rng=(Math.imul(1664525,rng)+1013904223)>>>0;return rng/4294967296};
- const expected=new Set();
- for(let i=0;i<22;i++)expected.add((5+Math.floor(random()*9))+','+Math.floor(random()*13));
- assert.deepEqual([...s.asteroids],[...expected]);
- assert.equal(s.asteroids.length,20);
- assert.deepEqual([...c.initialDoubles(true).asteroids],[...expected]);
+test('online asteroid generation uses seeded 2-large plus 10-20-small layout',()=>{
+ const a=c.initial(true,1984),b=c.initialDoubles(true,1984);
+ const layout=c.generateAsteroidField(1984,[{q:2,r:6},{q:16,r:6}]);
+ const small=layout.counters.filter(x=>x.type==='small').length;
+ assert.equal(layout.counters.filter(x=>x.type==='large').length,2);
+ assert.ok(small>=10&&small<=20);
+ assert.equal(a.asteroids.length,14+small);
+ assert.deepEqual(a.asteroids,layout.hexes);
+ assert.deepEqual(b.asteroids,layout.hexes);
 });
-
 test('1v1 and 2v2 generate matching, Firestore-safe asteroid layouts for a chosen seed',()=>{
  for(const seed of [1,42,1984,2026,4294967295]){
   const a=c.initial(true,seed),b=c.initialDoubles(true,seed);
   assert.equal(a.seed,seed);assert.equal(b.seed,seed);
   assert.deepEqual(a.asteroids,b.asteroids);
   assert.ok(a.asteroids.every(x=>typeof x==='string'));
-  assert.ok(a.asteroids.length<=22);
+  assert.ok(a.asteroids.length>=24&&a.asteroids.length<=34);
  }
  assert.notDeepEqual(c.initial(true,42).asteroids,c.initial(true,1984).asteroids);
 });
