@@ -214,7 +214,9 @@ function draw(){
 }
 $('map').onclick=e=>{
  const canvas=$('map'),rect=canvas.getBoundingClientRect();
- const x=(e.clientX-rect.left)*canvas.width/rect.width,y=(e.clientY-rect.top)*canvas.height/rect.height;
+ const scale=Math.min(rect.width/canvas.width,rect.height/canvas.height);
+ const marginX=(rect.width-canvas.width*scale)/2,marginY=(rect.height-canvas.height*scale)/2;
+ const x=(e.clientX-rect.left-marginX)/scale,y=(e.clientY-rect.top-marginY)/scale;
  const R=Math.min((canvas.width-50)/(Math.sqrt(3)*(NQ+NR/2)),(canvas.height-50)/(1.5*NR+.5))*zoom;
  const cx=canvas.width/2-Math.sqrt(3)*(NQ/2+NR/4)*R,cy=canvas.height/2-1.5*(NR-1)/2*R;
  const candidates=[{id:'GS-01',...state.ships.host},...enemy()].filter(x=>!x.dead);
