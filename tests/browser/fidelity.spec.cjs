@@ -24,6 +24,20 @@ test('local AI duel, clear-space Swarm, asteroid Swarm and hot-seat render witho
  }
  expect(errors).toEqual([]);
 });
+test('local hot-seat requires separate sealed orders and advances after both players commit',async({page})=>{
+ await page.goto('/game.html?scenario=duel&mode=hotseat');
+ await expect(page.locator('#status')).toContainText('STAR LEAGUE');
+ await page.locator('#execute').click();
+ await expect(page.locator('#status')).toContainText('KO-DAN');
+ await expect(page.locator('#turn')).toHaveText('01');
+ await page.locator('#execute').click();
+ await expect(page.locator('#turn')).toHaveText('02',{timeout:30000});
+});
+test('local versus-computer duel resolves a complete turn',async({page})=>{
+ await page.goto('/game.html?scenario=duel&mode=ai');
+ await page.locator('#execute').click();
+ await expect(page.locator('#turn')).toHaveText('02',{timeout:30000});
+});
 for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sealed orders and turn resolution',async({browser})=>{
  const pilots=[];
  try{
