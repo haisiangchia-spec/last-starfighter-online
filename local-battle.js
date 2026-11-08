@@ -47,7 +47,7 @@ function start(){
  if(!Number.isInteger(seed)||seed<1||seed>4294967295){message('ENTER A VALID BATTLE SEED');return}
  state=scenario==='swarm'?initialSwarm(asteroids,seed):initial(asteroids,seed);
  state.log=['LOCAL AI '+scenario.toUpperCase()+' · SEED '+seed,...state.log];
- movementOrders=null;targetDraft={};blossomMode=false;blossomArcs=Array(6).fill(0);blossomMissiles=Array(6).fill(false);blossomTargets=Array.from({length:6},()=>({}));$('plan').value='';
+ movementOrders=null;targetDraft={};blossomMode=false;blossomArcs=Array(6).fill(0);blossomMissiles=Array(6).fill(false);blossomTargets=Array.from({length:6},()=>({}));$('plan').value='';$('recharge').dataset.queued='false';
  $('laser').checked=true;$('particle').checked=true;$('missile').checked=false;
  render();
 }
@@ -142,7 +142,7 @@ function render(){
  $('plan').disabled=!ordersPhase;
  for(const id of ['addF','addL','addR','undoPlan','clearPlan'])$(id).disabled=!ordersPhase;
  $('submit').disabled=phase==='finished';$('submit').textContent=ordersPhase?'COMMIT MOVEMENT':phase==='targeting'?'LOCK WEAPON TARGETS':'MISSION COMPLETE';
- $('recharge').disabled=phase!=='targeting'||blossomMode||scenario==='swarm'&&!!ship.blossomRecharge;
+ $('recharge').disabled=phase!=='targeting'||blossomMode||!!movementOrders?.host?.plan?.length||scenario==='swarm'&&!!ship.blossomRecharge;
  $('blossom').disabled=scenario!=='swarm'||phase!=='targeting'||(!blossomMode&&(ship.power<4||ship.power>10||!!ship.blossomRecharge||ship.gunner>=6||ship.unconsciousGunner===1));
  $('blossom').title='Death Blossom: six clockwise volleys, then mandatory recharge';
  set('allowedMoves',moveLimit(ship)+' / '+(scenario==='swarm'?5:5));set('allowedTurns',turnLimit(ship)+' / 3');
@@ -256,4 +256,4 @@ for(const id of ['laser','particle','missile'])$(id).addEventListener('change',(
 $('resolve').disabled=true;
 $('localScenario').value=scenario;$('localAsteroids').value=asteroids?'on':'off';$('localSeed').value=seed;
 start();
-window.__localBattleTest={state:()=>structuredClone(state),restart:start,aiOrders,advance:()=>$('submit').click()};
+window.__localBattleTest={state:()=>structuredClone(state),restart:start,aiOrders,advance:()=>$('submit').click(),setGunstarPower:value=>{if(!params.has('battle_test'))throw Error('Test fixture disabled');player().power=value;render()}};
