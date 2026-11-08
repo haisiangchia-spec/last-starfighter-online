@@ -179,7 +179,12 @@ function weaponTargets(battle,slot,kind,i,arc=0,order=null){
  const allowed=({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[laserArc]||[];
  const rocks=rocksFor(battle);
  return candidates.filter(([,enemy])=>!enemy.dead&&!firingBlocked(ship,enemy,rocks)&&distance(ship,enemy)<=weaponRanges[kind]&&allowed.includes((facingToTarget(ship,enemy)-ship.d+6)%6))
- .map(([id,enemy])=>({id,range:distance(ship,enemy),toHit:(kind==='laser'?3:kind==='particle'?4:5)+distance(ship,enemy)-1+(enemy.lastMove===0?-1:0)+(rocks.has(rockKey(ship.q,ship.r))?1:0)+(rocks.has(rockKey(enemy.q,enemy.r))?1:0)}))
+ .map(([id,enemy])=>{
+  const base=kind==='laser'&&isSwarm(battle)&&teamSide(slot)==='guest'?4:kind==='laser'?3:kind==='particle'?4:5;
+  const penalty=isSwarm(battle)?Math.min(4,ship.aim||0):Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)));
+  const toHit=base+Math.max(1,distance(ship,enemy))-1+penalty+(enemy.lastMove===0?-1:0)+(rocks.has(rockKey(ship.q,ship.r))?1:0)+(rocks.has(rockKey(enemy.q,enemy.r))?1:0);
+  return {id,range:distance(ship,enemy),toHit};
+ })
  .sort((a,b)=>a.toHit-b.toHit||a.range-b.range||a.id.localeCompare(b.id));
 }
 function declaredTarget(battle,slot,order,kind,i,arc,legacyTarget){
