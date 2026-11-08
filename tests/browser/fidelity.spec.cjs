@@ -144,3 +144,30 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
   for(const {errors} of pilots)expect(errors).toEqual([]);
  }finally{await Promise.all(pilots.map(p=>p.context.close()))}
 });
+
+test('Death Blossom presents six independently selectable rotation volleys and forces recharge',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/game.html?scenario=swarm&mode=ai&battle_test=1');
+ await page.evaluate(()=>window.__battleTest.setup('swarm',{mode:'ai',asteroids:'none'}));
+ await page.evaluate(()=>window.__battleTest.damage('GS-01',{power:8}));
+ await page.locator('#blossom').click();
+ await page.locator('#execute').click();
+ await expect(page.locator('#phase')).toHaveText('TARGETING',{timeout:30000});
+ await page.locator('#execute').click();
+ for(let rotation=1;rotation<=6;rotation++){
+  await expect(page.locator('#phase')).toHaveText('BLOSSOM-TARGETING',{timeout:30000});
+  await expect(page.locator('#localTargetPanel')).toBeVisible();
+  await expect(page.locator('#execute')).toHaveText('FIRE THIS ROTATION');
+  const options=page.locator('select.localTargetSelect');
+  if(await options.count()){
+   await options.first().selectOption('none');
+  }
+  await page.locator('#execute').click();
+ }
+ await expect(page.locator('#turn')).toHaveText('02',{timeout:30000});
+ const after=await page.evaluate(()=>window.__battleTest.state());
+ expect(after.ships.find(s=>s.id==='GS-01').power).toBe(0);
+ const blossoming=after.history.filter(line=>line.includes('DEATH BLOSSOM ROTATION'));
+ expect(blossoming).toHaveLength(6);
+ expect(errors).toEqual([]);
+});
