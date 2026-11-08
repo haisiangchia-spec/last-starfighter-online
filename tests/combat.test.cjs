@@ -583,3 +583,20 @@ test('Firestore allows movement-only victory without forcing target declaration'
  const rules=fs.readFileSync(path.join(__dirname,'../firestore.rules'),'utf8');
  assert.match(rules,/resource\.data\.phase == 'orders'[\s\S]*?request\.resource\.data\.phase in \['targeting','finished'\]/);
 });
+
+test('Swarm vessels fire one forward laser apiece',()=>{
+ const battle=c.initialSwarm(false);
+ battle.ships.host.q=8; battle.ships.host.r=6;
+ for(const ship of Object.values(battle.fleet)){ship.q=9;ship.r=6;ship.d=3}
+ const result=c.apply(battle,{host:{plan:'',fire:'none'},guest:{plan:'',fire:'laser',fleetPlans:{}}},'fire');
+ const shots=result.lastVolley.shots.filter(x=>x.side==='guest'&&x.kind==='laser');
+ assert.equal(shots.length,14);
+});
+test('Swarm ships with a lost laser cannot fire',()=>{
+ const battle=c.initialSwarm(false);
+ battle.ships.host.q=8; battle.ships.host.r=6;
+ for(const ship of Object.values(battle.fleet)){ship.q=9;ship.r=6;ship.d=3}
+ battle.fleet['SW-01'].laserLoss=1;
+ const result=c.apply(battle,{host:{plan:'',fire:'none'},guest:{plan:'',fire:'laser',fleetPlans:{}}},'fire');
+ assert.equal(result.lastVolley.shots.filter(x=>x.side==='guest').length,13);
+});
