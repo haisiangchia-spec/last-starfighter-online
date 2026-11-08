@@ -829,3 +829,36 @@ test('milestone 2: overlapping temporary damage is deterministic for all four pi
   assert.equal(ship.stabilizer,0);
  }
 });
+
+test('milestone 2: all 36 printed damage-table cells produce their expected subsystem effects',()=>{
+ // Force each damage row via the collision table, then choose an actual turn
+ // yielding the required white die. Ko-Dan damage targets the pilot for W/K.
+ for(let row=0;row<6;row++)for(let col=0;col<6;col++){
+  const t=Array.from({length:4000},(_,i)=>i+1).find(t=>c.roll(t*3001+47)===col+1);
+  assert.ok(t!==undefined,'A white die outcome must be reachable');
+  const ship=c.initial(false).ships.guest,events=[];
+  c.damageShip(ship,'laser',t,'guest',events,row+1);
+  const code=c.damageRows[row][col];
+  assert.ok(events[0].includes('TABLE '+(row+1)+': '+code));
+  const expected={F:0,E:0,P:0,T:0,W:0,R:0,S:0,H:0,N:0,L:0,K:0,D:0,X:0};
+  for(const part of code.split(',')){
+   const key=part[0],amount=Number(part.slice(1))||1;
+   expected[key]+=amount;
+  }
+  assert.equal(ship.hull||0,expected.F,'Fuselage mismatch in '+code);
+  assert.equal(ship.engine||0,expected.E,'Engine mismatch in '+code);
+  assert.equal(ship.power,20-expected.P,'Power mismatch in '+code);
+  assert.equal(ship.aim||0,expected.T,'Targeting mismatch in '+code);
+  assert.equal(ship.pilot||0,expected.K?6:expected.W,'Pilot injury mismatch in '+code);
+  assert.equal(ship.nextRestrict||0,expected.R,'Steering damage mismatch in '+code);
+  assert.equal(ship.nextStabilizer||0,expected.S,'Stabilizer damage mismatch in '+code);
+  assert.equal(ship.nextHalf||0,expected.H,'Half-speed damage mismatch in '+code);
+  assert.equal(ship.nextConstant||0,expected.N,'Constant-speed damage mismatch in '+code);
+  assert.equal(ship.life||0,expected.L?6:0,'Life-support mismatch in '+code);
+  assert.equal(!!ship.dead,!!expected.D,'Destruction mismatch in '+code);
+  assert.equal(ship.hp,ship.dead?0:20-expected.F,'Remaining hull mismatch in '+code);
+  if(expected.X){
+   assert.ok(ship.laserLoss||ship.particleLost||ship.missileLost,'X must disable a weapon: '+code);
+  }
+ }
+});
