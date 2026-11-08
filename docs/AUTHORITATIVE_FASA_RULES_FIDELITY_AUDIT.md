@@ -50,3 +50,11 @@ The above table records the **baseline at audit time**. The following work was s
 - `tests/combat.test.cjs`: Added four tests for forced steering, asteroid target availability and hit number, 1v1/2v2 clearing, and blast confinement. **88/88 source-level checks passed** at commit `58c3cbc` (not a verified GitHub Actions result).
 
 **Remaining:** Browser/emulator verification; rock-click target selection (dropdown is present); Swarm-mode explicit asteroid selection; simultaneous multiple missile effects in the same cluster; original seven-hex asteroid-counter geometry and asteroid-on Swarm setup; online Death Blossom. The above P0 rows should not be interpreted as fully closed for all modes.
+
+## Implementation update — 2026-11-08: Ko-Dan Swarm fidelity pass
+
+- **FASA p.21 Swarm deployment:** The online combat engine's `initialSwarm(false)` now starts the Gunstar at (5,6), facing east, with two outward-facing waves at x=10 and x=12. `initialSwarm(true)` starts the Gunstar on the west edge at (0,6), facing east, with two inward-facing waves at x=16 and x=18, facing west. Initial asteroid placement excludes all 15 starting ship hexes. Regression tests cover both variants across three seeds.
+- **FASA p.19 Swarm asteroid clearing:** The Gunstar's photon missile may now select an empty `asteroid:q,r` target in the Swarm engine; a declared shot expends one missile, rolls against the asteroid-penalized target number, damages ships in the specified hex only, and clears that hex on a hit. A new source-level test verifies this.
+- **Source-level status:** 91/91 tests passed in the isolated production-engine harness at commit `fd65e58`. This is not a claim of current green GitHub Actions.
+- **Important scope restriction:** `index.html` and `firestore.rules` still prevent online Swarm matchmaking. The Swarm combat engine's coverage is preparatory, **not a playable online feature**. The local AI Swarm mode remains the supported Swarm route.
+- **Outstanding for full fidelity:** Large seven-hex asteroid counters and configurable asteroid placement; online Swarm Death Blossom and enabling multiplayer Swarm (when tested); browser emulator verification of revised multiplayer target selection, plus all unresolved fidelity audit entries above.
