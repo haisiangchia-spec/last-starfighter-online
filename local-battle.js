@@ -54,11 +54,17 @@ function playVolley(shots){
   draw();volleyTimer=setTimeout(next,650);
  };next();
 }
-function start(){
+function start(mode='random'){
  stopVolley();set('fireStatus','FIRE EFFECTS APPEAR HERE WHEN VOLLEY RESOLVES');
  scenario=$('localScenario').value;asteroids=$('localAsteroids').value==='on';
- seed=Number($('localSeed').value)||1984;
- if(!Number.isInteger(seed)||seed<1||seed>4294967295){message('ENTER A VALID BATTLE SEED');return}
+ if(mode==='manual'){
+  seed=Number($('localSeed').value);
+  if(!Number.isInteger(seed)||seed<1||seed>4294967295){message('ENTER A VALID BATTLE SEED');return}
+ }else{
+  const previous=seed;
+  do{seed=randomSeed()}while(seed===previous);
+  $('localSeed').value=String(seed);
+ }
  state=scenario==='swarm'?initialSwarm(asteroids,seed):initial(asteroids,seed);
  state.log=['LOCAL AI '+scenario.toUpperCase()+' · SEED '+seed,...state.log];
  movementOrders=null;targetDraft={};blossomMode=false;blossomArcs=Array(6).fill(0);blossomMissiles=Array(6).fill(false);blossomTargets=Array.from({length:6},()=>({}));$('plan').value='';$('recharge').dataset.queued='false';
@@ -156,7 +162,10 @@ function render(){
  $('movementControls').hidden=!ordersPhase;$('arcSettings').hidden=!ordersPhase;$('targetingPanel').hidden=phase!=='targeting';
  $('plan').disabled=!ordersPhase;
  for(const id of ['addF','addL','addR','undoPlan','clearPlan'])$(id).disabled=!ordersPhase;
- $('submit').disabled=phase==='finished';$('submit').textContent=ordersPhase?'COMMIT MOVEMENT':phase==='targeting'?'LOCK WEAPON TARGETS':'MISSION COMPLETE';
+ $('movementCommitWrap').hidden=!ordersPhase;
+ $('fireCommitWrap').hidden=phase!=='targeting';
+ $('submit').disabled=!ordersPhase;
+ $('fireSubmit').disabled=phase!=='targeting';
  $('recharge').disabled=phase!=='targeting'||blossomMode||!!movementOrders?.host?.plan?.length||scenario==='swarm'&&!!ship.blossomRecharge;
  $('blossom').disabled=scenario!=='swarm'||phase!=='targeting'||(!blossomMode&&(ship.power<4||ship.power>10||!!ship.blossomRecharge||ship.gunner>=6||ship.unconsciousGunner===1));
  $('blossom').title='Death Blossom: six clockwise volleys, then mandatory recharge';
@@ -186,7 +195,7 @@ function render(){
  $('fleetStatus').hidden=scenario!=='swarm';
  if(scenario==='swarm')$('fleetStatus').innerHTML=Object.entries(state.fleet).map(([id,x])=>'<div class="fleet-ship enemy '+(x.dead?'lost':'')+'">'+id+' · '+(x.dead?'DESTROYED':x.q+','+x.r)+'</div>').join('');
  $('weaponTargetRows').innerHTML=phase==='targeting'?(blossomMode?blossomRows():firingTargets()):'';
- $('submit').textContent=blossomMode?'FIRE DEATH BLOSSOM':$('submit').textContent;
+ $('fireSubmit').textContent=blossomMode?'FIRE DEATH BLOSSOM':'LOCK WEAPON TARGETS';
  $('blossom').textContent=blossomMode?'CANCEL DEATH BLOSSOM':'DEATH BLOSSOM';
  document.querySelectorAll('select.blossom-arc').forEach(el=>el.onchange=()=>{const r=Number(el.dataset.rotation);blossomArcs[r]=Number(el.value);blossomTargets[r]={};render()});
  document.querySelectorAll('select.blossom-target').forEach(el=>el.onchange=()=>{blossomTargets[Number(el.dataset.rotation)][el.dataset.weapon]=el.value});
@@ -306,8 +315,11 @@ $('map').onclick=e=>{
  $('inspectDialog').showModal();
 };
 $('closeInspect').onclick=()=>$('inspectDialog').close();
-$('submit').onclick=()=>state?.phase==='orders'?beginTargeting():commitFiring();
-$('newLocalMission').onclick=start;$('randomLocalMission').onclick=()=>{$('localSeed').value=String(randomSeed());start()};$('reset').onclick=start;
+$('submit').onclick=beginTargeting;
+$('fireSubmit').onclick=commitFiring;
+$('newLocalMission').onclick=()=>start('manual');
+$('randomLocalMission').onclick=()=>start('random');
+$('reset').onclick=()=>start('random');
 $('addF').onclick=()=>add('F');$('addL').onclick=()=>add('L');$('addR').onclick=()=>add('R');
 function add(x){const val=$('plan').value+x;try{predict(player(),val);$('plan').value=val;render()}catch(e){message(e.message)}}
 $('undoPlan').onclick=()=>{$('plan').value=$('plan').value.slice(0,-1);render()};
