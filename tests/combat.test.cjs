@@ -1225,3 +1225,15 @@ test('Only local AI game modes are linked in the lobby',()=>{
  assert.match(shared,/id="targetingPanel"/);
  assert.match(shared,/local-battle\.js/);
 });
+
+test('Local AI and multiplayer battle views retain identical tactical styling',()=>{
+ const online=fs.readFileSync(path.join(__dirname,'../online-battle.html'),'utf8');
+ const local=fs.readFileSync(path.join(__dirname,'../local-battle.html'),'utf8');
+ const css=html=>html.match(/<style>([\s\S]*?)<\/style>/)?.[1];
+ assert.ok(css(online));
+ assert.equal(css(local),css(online),'Local tactical CSS diverged from multiplayer layout; synchronize shared battle screens');
+ for(const id of ['map','battleQuickStatus','movementControls','targetingPanel','weaponTargetRows','flightDetail','weaponDetail','crewDetail','fleetStatus']){
+  assert.match(online,new RegExp('id="'+id+'"'));
+  assert.match(local,new RegExp('id="'+id+'"'));
+ }
+});
