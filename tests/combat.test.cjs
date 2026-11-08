@@ -431,3 +431,36 @@ test('three successive no-fire 2v2 turns preserve all four ships and independent
   }
  }
 });
+
+test('a powerless 1v1 ship cannot fire and cannot spend negative power',()=>{
+ const state=scenario();
+ state.ships.host.power=0;
+ state.ships.host.q=8;state.ships.host.r=6;state.ships.host.d=0;
+ state.ships.guest.q=9;state.ships.guest.r=6;state.ships.guest.d=3;
+ const next=c.apply(state,orders({plan:'',fire:'laser'},{plan:'',fire:'none'}));
+ assert.equal(next.ships.host.power,0);
+ assert.ok(next.log.some(x=>x.includes('INSUFFICIENT POWER')));
+ assert.ok(!next.lastVolley.shots.some(x=>x.side==='host'));
+});
+test('a powerless 2v2 ship cannot fire while the other pilots resolve their turn',()=>{
+ const state=c.initialDoubles(false);
+ state.ships.host.power=0;
+ const o=Object.fromEntries(Object.keys(state.ships).map(slot=>[slot,{plan:'',fire:'none',target:''}]));
+ o.host={plan:'',fire:'laser',target:'guest'};
+ const next=c.apply(state,o);
+ assert.equal(next.turn,2);
+ assert.equal(next.ships.host.power,0);
+ assert.ok(next.log.some(x=>x.includes('INSUFFICIENT POWER')));
+ assert.ok(!next.lastVolley.shots.some(x=>x.side==='host'));
+});
+test('1v1 and 2v2 recharge never exceed maximum power',()=>{
+ for(const doubles of [false,true]){
+  const state=doubles?c.initialDoubles(false):scenario();
+  state.ships.host.power=19;
+  const o=doubles?Object.fromEntries(Object.keys(state.ships).map(slot=>[slot,{plan:'',fire:'none',target:''}])):orders();
+  o.host={plan:'',fire:'guard'};
+  const next=c.apply(state,o);
+  assert.equal(next.ships.host.power,20);
+  assert.ok(next.log.some(x=>x.includes('RECHARGES +5 POWER')));
+ }
+});
