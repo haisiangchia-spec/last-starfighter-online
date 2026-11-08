@@ -12,7 +12,7 @@ assert.ok(start>=0&&end>start,'Combat engine source boundaries changed');
 const engine=source.slice(start,end);
 const sandbox={structuredClone,console};
 vm.createContext(sandbox);
-vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget,prepareTemporaryOnline,endTurnDamageOnline,predict,moveLimit,turnLimit,fireControlCrewReason,usableWeaponKinds,weaponTargets};',sandbox,{filename:'online-battle.js'});
+vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget,prepareTemporaryOnline,endTurnDamageOnline,predict,moveLimit,turnLimit,fireControlCrewReason,usableWeaponKinds,weaponTargets,availableAsteroidTargets,parseAsteroidTarget};',sandbox,{filename:'online-battle.js'});
 const c=sandbox.combat;
 const orders=(host={plan:'',fire:'none'},guest={plan:'',fire:'none'})=>({host,guest});
 function scenario(){const s=c.initial(false);s.log=[];return s}
@@ -916,4 +916,54 @@ test('milestone 2: 2v2 shot threshold matches preview with shooter inside an ast
  const fired=c.apply(state,orders,'fire');
  assert.ok(fired.log.some(x=>x.includes('HOST LASER')&&x.includes('VS '+preview.toHit)),
   'Resolved laser target number must equal the on-screen preview');
+});
+
+test('FASA p17: forced steering permits four turns, unrestricted movement does not',()=>{
+ const ship=c.initial(false).ships.host;
+ assert.throws(()=>c.predict(ship,'LLLL'),/System damage limits turns/);
+ ship.restrict='lockL';
+ assert.doesNotThrow(()=>c.predict(ship,'LLLL'));
+ ship.restrict=null;ship.constant=4;
+ assert.doesNotThrow(()=>c.predict(ship,'LLLL'));
+});
+test('FASA p19: photon target list includes clearable asteroid but laser target list excludes it',()=>{
+ const s=c.initial(false);s.asteroids=['4,6'];s.ships.host.d=0;
+ const targets=c.weaponTargets(s,'host','missile',0,0,{arc:0});
+ assert.ok(targets.some(t=>t.id==='asteroid:4,6'));
+ assert.ok(!c.weaponTargets(s,'host','laser',0,0,{arc:0}).some(t=>t.id==='asteroid:4,6'));
+ const t=targets.find(t=>t.id==='asteroid:4,6');
+ assert.equal(t.toHit,7,'Base 5 + one extra hex + asteroid +1');
+ assert.deepEqual({...c.parseAsteroidTarget(t.id,c.rocksFor(s))},{q:4,r:6});
+});
+test('FASA p19: an empty asteroid hex can be cleared by a declared photon missile in 1v1 and 2v2',()=>{
+ for(const mode of ['duel','doubles']){
+  const orderSlots=mode==='duel'?['host','guest']:['host','guest','host2','guest2'];
+  const base=mode==='duel'?c.initial(false):c.initialDoubles(false);
+  base.asteroids=['4,6'];base.ships.host.q=2;base.ships.host.r=6;base.ships.host.d=0;
+  const orders=Object.fromEntries(orderSlots.map(slot=>[slot,{plan:'',fire:slot==='host'?'missile':'none',targets:slot==='host'?{missile1:'asteroid:4,6'}:{},arc:0}]));
+  const initialMissiles=base.ships.host.missiles;
+  let cleared=false;
+  for(let turn=1;turn<140;turn++){
+   const s=structuredClone(base);s.turn=turn;
+   const result=c.apply(s,orders,'fire');
+   assert.equal(result.ships.host.missiles,initialMissiles-1,'Missile consumed even on miss');
+   if(!result.asteroids.includes('4,6')){
+    cleared=true;
+    assert.ok(result.log.some(x=>/ASTEROID DESTROYED/.test(x)));
+    assert.ok(result.lastVolley.shots.some(x=>x.kind==='missile'&&x.hit));
+    break;
+   }
+  }
+  assert.ok(cleared,mode+' can successfully target and clear empty asteroid hex');
+ }
+});
+test('FASA p19: asteroid missile burst damages only starships occupying the target rock hex',()=>{
+ const s=c.initialDoubles(false);s.asteroids=['4,6'];
+ s.ships.guest.q=4;s.ships.guest.r=6;
+ s.ships.guest2.q=5;s.ships.guest2.r=6;
+ const hits={host:[],guest:[],host2:[],guest2:[]},events=[];
+ c.missileBlast(s,c.rocksFor(s),{q:4,r:6},hits,events,'host');
+ assert.equal(hits.guest.length,1);
+ assert.equal(hits.guest2.length,0);
+ assert.ok(!s.asteroids.includes('4,6'));
 });
