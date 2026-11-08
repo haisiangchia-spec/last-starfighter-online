@@ -193,11 +193,47 @@ function draw(){
  const point=(q,r)=>[cx+Math.sqrt(3)*(q+r/2)*R,cy+1.5*r*R];
  const hex=(q,r,color,stroke='#174255')=>{const [x,y]=point(q,r);ctx.beginPath();for(let k=0;k<6;k++){const a=Math.PI/3*k+Math.PI/6;k?ctx.lineTo(x+R*.92*Math.cos(a),y+R*.92*Math.sin(a)):ctx.moveTo(x+R*.92*Math.cos(a),y+R*.92*Math.sin(a))}ctx.closePath();ctx.fillStyle=color;ctx.fill();ctx.strokeStyle=stroke;ctx.stroke()};
  for(let q=0;q<NQ;q++)for(let r=0;r<NR;r++)hex(q,r,'#081829');
+ if(showArcs&&!player().dead){
+  const ship=player(),arc=Number($('arc').value)||0;
+  const allowed=({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[arc]||[5,0,1];
+  for(let q=0;q<NQ;q++)for(let r=0;r<NR;r++){
+   if(q===ship.q&&r===ship.r||distance(ship,{q,r})>10)continue;
+   const dq=q-ship.q,dr=r-ship.r;
+   let best=0,bestScore=-Infinity;
+   for(let d=0;d<6;d++){const [x,y]=dirs[d],dot=x*dq+y*dr;
+    if(dot>bestScore){bestScore=dot;best=d}}
+   const relative=(best-ship.d+6)%6;
+   if(allowed.includes(relative))hex(q,r,'rgba(45,207,227,.09)','rgba(45,207,227,.15)');
+  }
+ }
  for(const key of rocksFor(state)){const [q,r]=key.split(',').map(Number);hex(q,r,'#684821','#c89550')}
  const mark=(q,r,d,label,color,dead=false)=>{if(dead)return;const [x,y]=point(q,r);const angle=d*Math.PI/3,rx=R*.5;ctx.save();ctx.translate(x,y);ctx.rotate(angle);ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(rx,0);ctx.lineTo(-rx*.7,-rx*.58);ctx.lineTo(-rx*.7,rx*.58);ctx.closePath();ctx.fill();ctx.restore();ctx.fillStyle=color;ctx.font='bold '+Math.max(9,R*.4)+'px monospace';ctx.textAlign='center';ctx.fillText(label,x,y-R*.8)};
  const a=player();mark(a.q,a.r,a.d,'GS-01','#66f7ff',a.dead);
  for(const t of enemy())mark(t.q,t.r,t.d,t.id,'#ff657c',t.dead);
 }
+$('map').onclick=e=>{
+ const canvas=$('map'),rect=canvas.getBoundingClientRect();
+ const x=(e.clientX-rect.left)*canvas.width/rect.width,y=(e.clientY-rect.top)*canvas.height/rect.height;
+ const R=Math.min((canvas.width-50)/(Math.sqrt(3)*(NQ+NR/2)),(canvas.height-50)/(1.5*NR+.5))*zoom;
+ const cx=canvas.width/2-Math.sqrt(3)*(NQ/2+NR/4)*R,cy=canvas.height/2-1.5*(NR-1)/2*R;
+ const candidates=[{id:'GS-01',...state.ships.host},...enemy()].filter(x=>!x.dead);
+ const distances=candidates.map(ship=>({ship,d:Math.hypot(x-(cx+Math.sqrt(3)*(ship.q+ship.r/2)*R),y-(cy+1.5*ship.r*R))})).sort((a,b)=>a.d-b.d);
+ if(!distances.length||distances[0].d>Math.max(13,R*.9))return;
+ const ship=distances[0].ship;
+ set('inspectTitle',ship.id+' · '+(ship.id==='GS-01'?'GUNSTAR':scenario==='swarm'?'SWARM FIGHTER':'DECK FIGHTER'));
+ $('inspectBody').innerHTML=[
+  ['HEX / HEADING',ship.q+','+ship.r+' / '+face[ship.d]],
+  ['STATUS',ship.dead?'DESTROYED':ship.pilot>=6?'PILOT KILLED':'ACTIVE'],
+  ['FUSELAGE DAMAGE',(ship.hull||0)+' / 20'],
+  ['ENGINE DAMAGE',ship.engine||0],['TARGETING DAMAGE',ship.aim||0],
+  ['POWER',ship.power||0],['MISSILES',ship.missiles||0],
+  ['PILOT INJURY',ship.pilot||0],['GUNNER INJURY',ship.gunner||0],
+  ['LASER LOSSES',ship.laserLoss||0],
+  ['PHOTON SYSTEM',ship.missileLost?'DESTROYED':'READY']
+ ].map(([k,v])=>'<div class="telemetry-line"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
+ $('inspectDialog').showModal();
+};
+$('closeInspect').onclick=()=>$('inspectDialog').close();
 $('submit').onclick=()=>state?.phase==='orders'?beginTargeting():commitFiring();
 $('newLocalMission').onclick=start;$('reset').onclick=start;
 $('addF').onclick=()=>add('F');$('addL').onclick=()=>add('L');$('addR').onclick=()=>add('R');
