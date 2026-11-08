@@ -1203,3 +1203,25 @@ test('Milestone 2: full turn transitions preserve deferred-speed collision prior
   assert.equal(state.ships[slot].deferredConstant,false);
  }
 });
+
+test('Local AI and multiplayer share byte-identical FASA tactical engine source',()=>{
+ const local=fs.readFileSync(path.join(__dirname,'../local-combat-engine.js'),'utf8');
+ const start=source.indexOf('const dirs='),end=source.indexOf('let visualEffects=null');
+ assert.ok(start>=0&&end>start);
+ const shared=source.slice(start,end).trim();
+ const localStart=local.indexOf('const dirs='),localEnd=local.lastIndexOf('export {');
+ assert.ok(localStart>=0&&localEnd>localStart);
+ assert.equal(local.slice(localStart,localEnd).trim(),shared,
+  'Offline AI combat engine diverged from multiplayer; regenerate from online-battle.js');
+});
+test('Only local AI game modes are linked in the lobby',()=>{
+ const lobby=fs.readFileSync(path.join(__dirname,'../index.html'),'utf8');
+ const shared=fs.readFileSync(path.join(__dirname,'../local-battle.html'),'utf8');
+ assert.match(lobby,/local-battle\.html\?scenario=duel/);
+ assert.match(lobby,/local-battle\.html\?scenario=swarm/);
+ assert.doesNotMatch(lobby,/mode=hotseat/);
+ assert.match(shared,/id="battleQuickStatus"/);
+ assert.match(shared,/id="movementControls"/);
+ assert.match(shared,/id="targetingPanel"/);
+ assert.match(shared,/local-battle\.js/);
+});
