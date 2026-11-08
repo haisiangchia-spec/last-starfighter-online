@@ -137,6 +137,11 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
   async function playRound(round){
    for(const {page} of pilots){
     await expect(page.locator('#submit')).toHaveText('COMMIT MOVEMENT',{timeout:30000});
+    await expect(page.locator('#movementControls')).toBeVisible();
+    await expect(page.locator('#arcSettings')).toBeVisible();
+    await expect(page.locator('#allowedMoves')).toContainText('5 / 5');
+    await expect(page.locator('#allowedTurns')).toContainText('3 / 3');
+    await expect(page.locator('#movementRemaining')).toContainText('0 / 5 steps');
     await expect(page.locator('#laser')).toBeEnabled();
     await page.locator('#submit').click();
     await expect(page.locator('#status')).not.toContainText('ORDER REJECTED',{timeout:15000});
@@ -154,6 +159,9 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
     await expect(page.locator('#targetingPanel')).toBeVisible({timeout:30000});
     await expect(page.locator('#turn')).toHaveText(String(round));
     await expect(page.locator('#submit')).toHaveText('LOCK WEAPON TARGETS');
+    await expect(page.locator('#movementControls')).toBeHidden();
+    await expect(page.locator('#arcSettings')).toBeHidden();
+    await expect(page.locator('#targetingPanel')).toBeVisible();
     const assignments=page.locator('select.target-assignment');
     if(await assignments.count()){
      const options=await assignments.first().locator('option').evaluateAll(nodes=>nodes.map(n=>n.value));
@@ -306,6 +314,7 @@ for(const size of [1,2])test('release gate: real '+size+'v'+size+' completes fro
     const page=pilots[i].page;
     await expect(page.locator('#submit')).toHaveText('COMMIT MOVEMENT',{timeout:30000});
     await expect(page.locator('#turn')).toHaveText(String(round));
+    await expect(page.locator('#movementControls')).toBeVisible();
     for(const kind of ['laser','particle','missile'])await page.locator('#'+kind).uncheck();
     // Deck Fighters move west toward and eventually off the left edge; Gunstar ships hold.
     await page.locator('#plan').fill(factions[i]==='host'?'':round===4?'FF':'FFFFF');
@@ -315,6 +324,7 @@ for(const size of [1,2])test('release gate: real '+size+'v'+size+' completes fro
    if(round<4){
     for(const {page} of pilots){
      await expect(page.locator('#targetingPanel')).toBeVisible({timeout:30000});
+     await expect(page.locator('#movementControls')).toBeHidden();
      await expect(page.locator('#submit')).toHaveText('LOCK WEAPON TARGETS');
     }
     for(const {page} of pilots)await page.locator('#submit').click();
