@@ -185,3 +185,24 @@ test('Death Blossom presents six independently selectable rotation volleys and f
  await expect(page.locator('#missile')).toBeDisabled();
  expect(errors).toEqual([]);
 });
+
+test('Gunstar may decline Death Blossom after Swarm fire and finish normal firing',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/game.html?scenario=swarm&mode=ai&battle_test=1');
+ await page.evaluate(()=>{
+  const game=window.__battleTest;
+  game.setup('swarm',{mode:'ai',asteroids:'none'});
+  game.damage('GS-01',{power:8});
+  for(let i=1;i<=14;i++)game.damage('SW-'+String(i).padStart(2,'0'),{laserLoss:1});
+ });
+ await page.locator('#execute').click();
+ await expect(page.locator('#phase')).toHaveText('TARGETING',{timeout:30000});
+ await page.locator('#execute').click();
+ await expect(page.locator('#phase')).toHaveText('BLOSSOM-DECISION',{timeout:30000});
+ await page.locator('#execute').click();
+ await expect(page.locator('#turn')).toHaveText('02',{timeout:30000});
+ const final=await page.evaluate(()=>window.__battleTest.state());
+ expect(final.history.some(line=>line.includes('GUNSTAR ELECTS NORMAL FIRE'))).toBe(true);
+ expect(final.history.filter(line=>line.includes('DEATH BLOSSOM ROTATION'))).toHaveLength(0);
+ expect(errors).toEqual([]);
+});
