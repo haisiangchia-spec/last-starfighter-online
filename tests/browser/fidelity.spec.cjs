@@ -148,12 +148,20 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
 test('Death Blossom presents six independently selectable rotation volleys and forces recharge',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/game.html?scenario=swarm&mode=ai&battle_test=1');
- await page.evaluate(()=>window.__battleTest.setup('swarm',{mode:'ai',asteroids:'none'}));
- await page.evaluate(()=>window.__battleTest.damage('GS-01',{power:8}));
- await page.locator('#blossom').click();
+ await page.evaluate(()=>{
+  const game=window.__battleTest;
+  game.setup('swarm',{mode:'ai',asteroids:'none'});
+  game.damage('GS-01',{power:8});
+  // Isolate the special-fire sequence: no incoming Swarm damage can prevent activation.
+  for(let i=1;i<=14;i++)game.damage('SW-'+String(i).padStart(2,'0'),{laserLoss:1});
+ });
  await page.locator('#execute').click();
  await expect(page.locator('#phase')).toHaveText('TARGETING',{timeout:30000});
  await page.locator('#execute').click();
+ await expect(page.locator('#phase')).toHaveText('BLOSSOM-DECISION',{timeout:30000});
+ await expect(page.locator('#blossom')).toBeEnabled();
+ await expect(page.locator('#execute')).toHaveText('FIRE NORMALLY');
+ await page.locator('#blossom').click();
  for(let rotation=1;rotation<=6;rotation++){
   await expect(page.locator('#phase')).toHaveText('BLOSSOM-TARGETING',{timeout:30000});
   await expect(page.locator('#localTargetPanel')).toBeVisible();
