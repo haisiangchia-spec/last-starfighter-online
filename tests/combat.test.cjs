@@ -240,21 +240,21 @@ test('2v2 combat uses explicit enemy target',()=>{
  assert.ok(fired);
 });
 
-test('2v2 never declares victory merely because both opposing pilots are killed',()=>{
+test('2v2 awards victory when both opposing pilots are killed',()=>{
  const battle=c.initialDoubles(false),orders={};
  for(const slot of Object.keys(battle.ships))orders[slot]={plan:'',fire:'none',target:''};
  battle.ships.guest.pilot=6;battle.ships.guest2.pilot=6;
  const next=c.apply(battle,orders);
- assert.equal(next.winner,null);
- assert.equal(next.phase,'orders');
+ assert.equal(next.winner,'STAR LEAGUE');
+ assert.equal(next.phase,'finished');
  assert.equal(next.ships.guest.dead,false);
  assert.equal(next.ships.guest2.dead,false);
 });
-test('2v2 defeat requires both enemy ships physically destroyed, even when one pilot is dead',()=>{
+test('2v2 defeat counts a destroyed ship and a killed pilot as elimination',()=>{
  const battle=c.initialDoubles(false),orders={};
  for(const slot of Object.keys(battle.ships))orders[slot]={plan:'',fire:'none',target:''};
  battle.ships.guest.dead=true;battle.ships.guest2.pilot=6;
- assert.equal(c.apply(battle,orders).winner,null);
+ assert.equal(c.apply(battle,orders).winner,'STAR LEAGUE');
  battle.ships.guest2.dead=true;
  assert.equal(c.apply(battle,orders).winner,'STAR LEAGUE');
 });
@@ -273,7 +273,7 @@ test('sealed order IDs are scoped to a unique match for rematches',()=>{
 });
 test('2v2 shows four fleet statuses and does not end when only one ship is lost',()=>{
  assert.match(source,/fleetStatus/);
- assert.match(source,/const defeated=side=>battleSlots\.filter\(x=>teamSide\(x\)===side\)\.every\(x=>out\.ships\[x\]\.dead\)/);
+ assert.match(source,/const defeated=side=>battleSlots\.filter\(x=>teamSide\(x\)===side\)\.every\(x=>out\.ships\[x\]\.dead\|\|out\.ships\[x\]\.pilot>=6\)/);
 });
 
 test('asteroid check is identical for first pilots in 1v1 and 2v2',()=>{
