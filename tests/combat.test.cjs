@@ -12,7 +12,7 @@ assert.ok(start>=0&&end>start,'Combat engine source boundaries changed');
 const engine=source.slice(start,end);
 const sandbox={structuredClone,console};
 vm.createContext(sandbox);
-vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget,prepareTemporaryOnline,endTurnDamageOnline};',sandbox,{filename:'online-battle.js'});
+vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget,prepareTemporaryOnline,endTurnDamageOnline,predict,moveLimit,turnLimit};',sandbox,{filename:'online-battle.js'});
 const c=sandbox.combat;
 const orders=(host={plan:'',fire:'none'},guest={plan:'',fire:'none'})=>({host,guest});
 function scenario(){const s=c.initial(false);s.log=[];return s}
@@ -783,5 +783,49 @@ test('milestone 2: life-support expiry kills pilot without silently destroying t
   assert.equal(ship.killedSpeed,2);
   assert.equal(ship.dead,false);
   assert.ok(events.some(line=>line.includes('LIFE SUPPORT EXPIRED')));
+ }
+});
+
+test('milestone 2: normal movement damage limits and steering prohibitions are enforced',()=>{
+ const ship=c.initial(false).ships.host;
+ ship.engine=8;ship.hull=0;
+ assert.equal(c.moveLimit(ship),1);
+ assert.equal(c.turnLimit(ship),1);
+ assert.throws(()=>c.predict(ship,'FF'),/Engine damage limits movement/);
+ ship.engine=0;ship.restrict='noL';
+ assert.throws(()=>c.predict(ship,'L'),/Steering restriction/);
+ ship.restrict='lockF';
+ assert.throws(()=>c.predict(ship,'R'),/Steering locked/);
+});
+test('milestone 2: locked steering and no-speed-change follow the local movement exception',()=>{
+ const ship=c.initial(false).ships.host;
+ ship.engine=8;
+ // The forced single-step vector remains allowed under a steering lock.
+ ship.restrict='lockL';
+ assert.doesNotThrow(()=>c.predict(ship,'L'));
+ assert.throws(()=>c.predict(ship,'F'),/Steering locked/);
+ // Normal turning restrictions still apply to an unrestricted ship.
+ ship.engine=4;ship.restrict=null;ship.constant=null;
+ assert.equal(c.turnLimit(ship),2);
+ assert.throws(()=>c.predict(ship,'LLL'),/System damage limits turns/);
+ // A constant-speed restriction bypasses the normal turn cap, as in
+ // the local FASA rules, without bypassing movement or speed limits.
+ ship.constant=3;
+ assert.doesNotThrow(()=>c.predict(ship,'LLL'));
+ assert.throws(()=>c.predict(ship,'LL'),/Constant-speed damage requires/);
+});
+test('milestone 2: overlapping temporary damage is deterministic for all four pilots',()=>{
+ for(const slot of ['host','guest','host2','guest2']){
+  const state=slot.endsWith('2')?c.initialDoubles(false):c.initial(false);
+  const ship=state.ships[slot],events=[];
+  ship.lastMove=3;ship.nextRestrict=2;ship.nextStabilizer=1;
+  c.endTurnDamageOnline(ship,6,slot,events);
+  assert.equal(ship.stabilizer,1);
+  assert.equal(ship.restrict,null);
+  assert.equal(ship.nextRestrict,0);
+  assert.equal(ship.nextStabilizer,0);
+  assert.ok(events.some(x=>x.includes('STEERING RESTRICTION IGNORED')));
+  c.endTurnDamageOnline(ship,7,slot,events);
+  assert.equal(ship.stabilizer,0);
  }
 });
