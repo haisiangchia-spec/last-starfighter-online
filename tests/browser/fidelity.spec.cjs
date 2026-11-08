@@ -13,7 +13,7 @@ test('local AI duel, clear-space Swarm, asteroid Swarm and hot-seat render witho
  ]){
   await page.goto('/game.html?scenario='+scenario+'&mode='+mode);
   await page.locator('#asteroids').selectOption(asteroids);
-  await page.locator('#newGame').click();
+  await page.locator('#new').click();
   const data=await page.evaluate(()=>({scenario,mode,asteroids,ships:ships.map(s=>({id:s.id,q:s.q,r:s.r,d:s.d})),canvas:document.querySelector('canvas').getBoundingClientRect().width}));
   expect(data.ships).toHaveLength(count);expect(data.ships[0].id).toBe('GS-01');
   expect(data.ships[1].d).toBe(facing);expect(data.canvas).toBeGreaterThan(100);
