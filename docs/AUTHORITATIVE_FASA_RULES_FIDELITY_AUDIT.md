@@ -58,3 +58,15 @@ The above table records the **baseline at audit time**. The following work was s
 - **Source-level status:** 91/91 tests passed in the isolated production-engine harness at commit `fd65e58`. This is not a claim of current green GitHub Actions.
 - **Important scope restriction:** `index.html` and `firestore.rules` still prevent online Swarm matchmaking. The Swarm combat engine's coverage is preparatory, **not a playable online feature**. The local AI Swarm mode remains the supported Swarm route.
 - **Outstanding for full fidelity:** Large seven-hex asteroid counters and configurable asteroid placement; online Swarm Death Blossom and enabling multiplayer Swarm (when tested); browser emulator verification of revised multiplayer target selection, plus all unresolved fidelity audit entries above.
+
+## Locked house-rule exception — asteroid setup (2026-11-08)
+
+The owner explicitly **removed manual asteroid placement** from the fidelity target. On **every asteroid-enabled map**, both the local game and online engines now automatically generate:
+- **Exactly two large asteroid counters**, each consisting of a central hex and six surrounding hexes;
+- **10 to 20 small single-hex asteroid counters (inclusive)**, with count and positions derived deterministically from the match seed.
+
+The engine avoids overlapping asteroid hexes and provides at least one clear hex between every asteroid and all starting ships. The seeded layouts may differ between Duel, 2v2, and Swarm because ship starting coordinates differ; each scenario reproduces the same layout for the same seed. Small and large asteroid hexes continue to use the existing per-hex collision, line-of-sight, and photon-missile-clearing rules.
+
+**This is intentional rather than a missing feature. Do not schedule player-chosen asteroid count, manual placement, or exact printed counter-placement procedure for future work unless the owner changes the house rule.**
+
+Source-level regression verification: **94/94 tests passed** after the four-ship clearance correction. Browser CI has not yet been verified green for these commits.
