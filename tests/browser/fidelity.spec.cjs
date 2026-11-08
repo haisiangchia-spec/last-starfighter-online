@@ -116,9 +116,11 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
   for(const {page} of pilots){await page.locator('#ready').click()}
   await expect(host.locator('#launch')).toBeEnabled({timeout:20000});
   for(const {page} of pilots){
+   const name=await page.locator('#pilotName').inputValue();
    await page.goto('/online-battle.html?emulator=1#room='+code);
    await expect(page.locator('#turn')).toHaveText('1',{timeout:30000});
    await expect(page.locator('#asteroidSync')).toContainText('ASTEROID FIELD ACTIVE');
+   await expect(page.locator('#identity')).toContainText(name);
   }
   const asteroidLabels=await Promise.all(pilots.map(async({page})=>(await page.locator('#asteroidSync').textContent()).trim()));
   expect(new Set(asteroidLabels).size).toBe(1);
