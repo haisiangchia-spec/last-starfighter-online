@@ -255,6 +255,26 @@ const weaponRanges={laser:10,particle:9,missile:8};
 const weaponLabels={laser:'LASER',particle:'PARTICLE CANNON',missile:'PHOTON MISSILE'};
 const weaponId=(kind,i)=>kind+(i+1);
 function weaponArc(slot,order,kind,i){if(kind!=='laser')return 0;if(teamSide(slot)==='host')return Number(order?.arc??0);if(i===2)return 3;return i===0?Number(order?.portLaserArc??0):Number(order?.starboardLaserArc??0)}
+// Match the local game's separate pilot/gunner firing responsibilities.
+function fireControlCrewReason(ship,slot){
+ if(ship.dead)return 'SHIP DESTROYED';
+ if(teamSide(slot)==='host'){
+  if((ship.gunner||0)>=6)return 'GUNNER KILLED · NO FIRING';
+  if(ship.unconsciousGunner===1)return 'GUNNER UNCONSCIOUS · NO FIRING';
+ }else{
+  if((ship.pilot||0)>=6)return 'PILOT KILLED · NO FIRING';
+  if(ship.unconsciousPilot===1)return 'PILOT UNCONSCIOUS · NO FIRING';
+ }
+ if((ship.power??20)<=0)return 'NO POWER · WEAPONS DISABLED';
+ return null;
+}
+function usableWeaponKinds(ship,slot,kinds){
+ return kinds.filter(kind=>
+  (kind!=='laser'||(teamSide(slot)==='host'?2:3)>(ship.laserLoss||0))&&
+  (kind!=='particle'||!ship.particleLost)&&
+  (kind!=='missile'||(!ship.missileLost&&(ship.missiles??0)>0))
+ );
+}
 function weaponTargets(battle,slot,kind,i,arc=0,order=null){
  const ship=slot==='guest'&&isSwarm(battle)?null:battle.ships[slot];
  if(!ship||ship.dead)return [];
@@ -655,26 +675,6 @@ function renderPhaseGuide(){
  $('quickShip').textContent=shipId+' · '+(pilotNames[role]||'PILOT');
  $('quickResources').textContent='POWER '+(self.power??0)+'/20 · HULL '+(self.hp??0)+'/20 · MISSILES '+(self.missiles??0);
  updateMovementGuidance();
-}
-// Match the local game's separate pilot/gunner firing responsibilities.
-function fireControlCrewReason(ship,slot){
- if(ship.dead)return 'SHIP DESTROYED';
- if(teamSide(slot)==='host'){
-  if((ship.gunner||0)>=6)return 'GUNNER KILLED · NO FIRING';
-  if(ship.unconsciousGunner===1)return 'GUNNER UNCONSCIOUS · NO FIRING';
- }else{
-  if((ship.pilot||0)>=6)return 'PILOT KILLED · NO FIRING';
-  if(ship.unconsciousPilot===1)return 'PILOT UNCONSCIOUS · NO FIRING';
- }
- if((ship.power??20)<=0)return 'NO POWER · WEAPONS DISABLED';
- return null;
-}
-function usableWeaponKinds(ship,slot,kinds){
- return kinds.filter(kind=>
-  (kind!=='laser'||(teamSide(slot)==='host'?2:3)>(ship.laserLoss||0))&&
-  (kind!=='particle'||!ship.particleLost)&&
-  (kind!=='missile'||(!ship.missileLost&&(ship.missiles??0)>0))
- );
 }
 function renderTargetChoices(){
  const stage=state?.phase==='targeting';
