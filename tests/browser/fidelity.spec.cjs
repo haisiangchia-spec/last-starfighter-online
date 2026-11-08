@@ -183,6 +183,16 @@ test('Death Blossom presents six independently selectable rotation volleys and f
  await expect(page.locator('#laser')).toBeDisabled();
  await expect(page.locator('#particle')).toBeDisabled();
  await expect(page.locator('#missile')).toBeDisabled();
+ const position={q:gunstar.q,r:gunstar.r};
+ await page.locator('#execute').click();
+ await expect(page.locator('#phase')).toHaveText('TARGETING',{timeout:30000});
+ await page.locator('#execute').click();
+ await expect(page.locator('#turn')).toHaveText('03',{timeout:30000});
+ const recovered=await page.evaluate(()=>window.__battleTest.state());
+ const afterRecharge=recovered.ships.find(s=>s.id==='GS-01');
+ expect([afterRecharge.q,afterRecharge.r]).toEqual([position.q,position.r]);
+ expect(afterRecharge.power).toBe(5);
+ expect(recovered.history.some(line=>line.includes('GS-01 RECHARGED +5 POWER'))).toBe(true);
  expect(errors).toEqual([]);
 });
 
