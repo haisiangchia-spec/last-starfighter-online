@@ -456,3 +456,36 @@ test('shared local AI map supports click-to-inspect and firing arc toggling',asy
  await page.locator('#closeInspect').click();
  await expect(page.locator('#inspectDialog')).toBeHidden();
 });
+
+test('local Duel shows a live projected ship and route for every movement step without committing its actual position',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/local-battle.html?scenario=duel&asteroids=off&seed=1984');
+ const snapshot=()=>page.evaluate(()=>({
+  ship:window.__localBattleTest.state().ships.host,
+  map:document.getElementById('map').toDataURL(),
+  preview:document.getElementById('preview').textContent,
+  chips:document.getElementById('moveChips').textContent
+ }));
+ const initial=await snapshot();
+ for(const [button,plan] of [['addF','F'],['addL','FL'],['addR','FLR']]){
+  await page.locator('#'+button).click();
+  await expect(page.locator('#plan')).toHaveValue(plan);
+  await expect(page.locator('#preview')).toContainText('END HEX');
+  await expect(page.locator('#moveChips')).toContainText(plan.length+' ·');
+  const current=await snapshot();
+  expect(current.map).not.toBe(initial.map);
+  expect([current.ship.q,current.ship.r,current.ship.d]).toEqual([initial.ship.q,initial.ship.r,initial.ship.d]);
+ }
+ await page.locator('#undoPlan').click();
+ await expect(page.locator('#plan')).toHaveValue('FL');
+ await page.locator('#clearPlan').click();
+ await expect(page.locator('#plan')).toHaveValue('');
+ const cleared=await snapshot();
+ expect(cleared.map).toBe(initial.map);
+ await page.locator('#addF').click();
+ await page.locator('#submit').click();
+ const committed=await page.evaluate(()=>window.__localBattleTest.state());
+ expect(committed.ships.host.q).not.toBe(initial.ship.q);
+ await expect(page.locator('#targetingPanel')).toBeVisible();
+ expect(errors).toEqual([]);
+});
