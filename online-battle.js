@@ -402,8 +402,9 @@ function applySwarm(s,orders,stage='full'){
   events.push(id+' VECTOR '+(steps.join('')||'HOLD')+' · HEX '+ship.q+','+ship.r);
  }
  if(stage!=='fire'){
- travel(gun,host.plan,'GS-01','host',0);
+ // FASA sequence: Swarm ships move in numerical order, then the Gunstar.
  for(let i=0;i<fighters.length;i++){const [id,ship]=fighters[i];travel(ship,guest.fleetPlans?.[id]||'',id,'guest',i+1)}
+ travel(gun,host.plan,'GS-01','host',0);
  }
  if(stage==='move')return targetingSnapshot(out,orders,events);
  const live=()=>activeFleet(out);
