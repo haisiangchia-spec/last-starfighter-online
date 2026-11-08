@@ -33,7 +33,7 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - name: Run emulator-backed browser tests
-        run: npx firebase emulators:exec --project demo-starfighter --only auth,firestore "npm run test:browser"
+        run: npx firebase emulators:exec --project starfighter-online --only auth,firestore "npm run test:browser"
         env:
           CI: 'true'
       - name: Attach Playwright failure report
