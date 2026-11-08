@@ -6,6 +6,7 @@ let scenario=params.get('scenario')==='swarm'?'swarm':'duel';
 const randomSeed=()=>{if(typeof crypto!=='undefined'&&crypto.getRandomValues){const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]||1}return 1+Math.floor(Math.random()*4294967294)};
 let asteroids=params.get('asteroids')!=='off',seed=Number(params.get('seed'))||randomSeed();
 let state, movementOrders=null, targetDraft={}, zoom=1, showArcs=true;
+let volleyQueue=[], volleyIndex=-1, volleyTimer=null;
 let blossomMode=false,blossomArcs=Array(6).fill(0),blossomMissiles=Array(6).fill(false),blossomTargets=Array.from({length:6},()=>({}));
 const face=['EAST','SOUTHEAST','SOUTHWEST','WEST','NORTHWEST','NORTHEAST'];
 const player=()=>state?.ships.host;
@@ -41,7 +42,20 @@ function moveDraft(){
  try{predict(player(),plan);return {plan,fire:chosenWeapons(),arc:Number($('arc').value),portLaserArc:Number($('portLaserArc').value),starboardLaserArc:Number($('starboardLaserArc').value)}}
  catch(e){message('INVALID VECTOR: '+e.message);return null}
 }
+function stopVolley(){if(volleyTimer!==null)clearTimeout(volleyTimer);volleyTimer=null;volleyQueue=[];volleyIndex=-1;}
+function playVolley(shots){
+ stopVolley();volleyQueue=(shots||[]).filter(s=>s.from&&s.to);if(!volleyQueue.length)return;
+ $('fireStatus').textContent='FIRING REPLAY · '+volleyQueue.length+' SHOT(S)';
+ const next=()=>{
+  volleyIndex++;
+  if(volleyIndex>=volleyQueue.length){volleyTimer=null;volleyIndex=-1;set('fireStatus','VOLLEY COMPLETE · '+volleyQueue.length+' SHOT(S)');draw();return}
+  const s=volleyQueue[volleyIndex];
+  set('fireStatus','SHOT '+(volleyIndex+1)+' / '+volleyQueue.length+' · '+s.kind.toUpperCase()+' · '+(s.hit?'HIT':'MISS'));
+  draw();volleyTimer=setTimeout(next,650);
+ };next();
+}
 function start(){
+ stopVolley();set('fireStatus','FIRE EFFECTS APPEAR HERE WHEN VOLLEY RESOLVES');
  scenario=$('localScenario').value;asteroids=$('localAsteroids').value==='on';
  seed=Number($('localSeed').value)||1984;
  if(!Number.isInteger(seed)||seed<1||seed>4294967295){message('ENTER A VALID BATTLE SEED');return}
@@ -118,8 +132,9 @@ function commitFiring(){
  else if($('recharge').dataset.queued==='true'){host.fire='guard';host.targets={}}
  const enemyOrder={...movementOrders.guest};
  state=apply(state,{host,guest:enemyOrder},'fire');
+ const resolvedShots=state.lastVolley?.shots||[];
  movementOrders=null;targetDraft={};blossomMode=false;$('recharge').dataset.queued='false';
- $('plan').value='';render();
+ $('plan').value='';render();playVolley(resolvedShots);
 }
 function fireBlossom(){
  if(scenario!=='swarm'||state?.phase!=='targeting')return;
@@ -240,6 +255,20 @@ function draw(){
  }
  mark(a.q,a.r,a.d,route?'GS-01 · START':'GS-01','#66f7ff',a.dead);
  for(const t of enemy())mark(t.q,t.r,t.d,t.id,'#ff657c',t.dead);
+ // Repaint the last resolved shot over the final ship positions, never a fabricated outcome.
+ if(volleyIndex>=0&&volleyQueue[volleyIndex]){
+  const s=volleyQueue[volleyIndex],start=point(s.from.q,s.from.r);
+  // A miss veers into an unoccupied nearby hex; a hit terminates on its true target.
+  let endHex={...s.to};
+  if(!s.hit){
+   const occupied=[player(),...enemy()].filter(x=>!x.dead);
+   const options=dirs.map(([dq,dr])=>({q:s.to.q+dq,r:s.to.r+dr})).filter(p=>p.q>=0&&p.q<NQ&&p.r>=0&&p.r<NR&&!occupied.some(x=>x.q===p.q&&x.r===p.r));
+   if(options.length)endHex=options[(volleyIndex+s.from.q+s.from.r)%options.length];
+  }
+  const end=point(endHex.q,endHex.r),color=s.kind==='laser'?'#ff477a':s.kind==='particle'?'#69e8ff':'#ffd263';
+  ctx.save();ctx.shadowColor=color;ctx.shadowBlur=18;ctx.strokeStyle=color;ctx.lineWidth=Math.max(4,R*.16);ctx.beginPath();ctx.moveTo(...start);ctx.lineTo(...end);ctx.stroke();
+  ctx.shadowBlur=0;ctx.fillStyle=s.hit?'#aaffcb':'#ffdd94';ctx.font='bold '+Math.max(16,R*.58)+'px monospace';ctx.textAlign='center';ctx.fillText(s.hit?'HIT':'MISS',end[0],end[1]-R*.75);ctx.restore();
+ }
  if(route?.length>1){
   const final=route[route.length-1];
   mark(final.q,final.r,final.d,'PLANNED · '+plan.length,'#76ffe0',a.dead);
@@ -261,11 +290,18 @@ $('map').onclick=e=>{
   ['HEX / HEADING',ship.q+','+ship.r+' / '+face[ship.d]],
   ['STATUS',ship.dead?'DESTROYED':ship.pilot>=6?'PILOT KILLED':'ACTIVE'],
   ['FUSELAGE DAMAGE',(ship.hull||0)+' / 20'],
-  ['ENGINE DAMAGE',ship.engine||0],['TARGETING DAMAGE',ship.aim||0],
+  ['ENGINE DAMAGE',ship.engine||0],['MOVEMENT CAP',moveLimit(ship)+' HEX / '+turnLimit(ship)+' TURNS'],
+  ['STEERING RESTRICTION',ship.restrict||'NONE'],['STABILIZER',ship.stabilizer?'DAMAGED · RANDOM MANOEUVRE':'NOMINAL'],
+  ['SPEED RESTRICTION',ship.constant!=null?'LOCKED TO '+ship.constant+' HEX':ship.half?'HALF SPEED · '+ship.half+' HIT(S)':'NONE'],
+  ['PENDING ENGINE EFFECTS',[ship.nextRestrict?'STEERING':null,ship.nextStabilizer?'STABILIZER':null,ship.nextHalf?'HALF SPEED':null,ship.nextConstant?'SPEED LOCK':null].filter(Boolean).join(', ')||'NONE'],
+  ['PILOT CONTROL',ship.unconsciousPilot?'UNCONSCIOUS':'AVAILABLE'],['TARGETING DAMAGE',ship.aim||0],
   ['POWER',ship.power||0],['MISSILES',ship.missiles||0],
   ['PILOT INJURY',ship.pilot||0],['GUNNER INJURY',ship.gunner||0],
-  ['LASER LOSSES',ship.laserLoss||0],
-  ['PHOTON SYSTEM',ship.missileLost?'DESTROYED':'READY']
+  ['LASERS',Math.max(0,(ship.type==='swarm'?1:ship.id==='GS-01'?2:3)-(ship.laserLoss||0))+' OPERATIONAL · '+(ship.laserLoss||0)+' LOST'],
+  ['PARTICLE CANNON',ship.particleLost?'DESTROYED':'READY'],
+  ['PHOTON SYSTEM',ship.missileLost?'DESTROYED':'READY'],
+  ['FIRE CONTROL',ship.unconsciousGunner?'GUNNER UNCONSCIOUS':'GUNNER AVAILABLE'],
+  ['POWERED WEAPON GROUPS',Math.max(1,3-Math.max(Math.floor((ship.engine||0)/4),Math.floor((ship.hull||0)/8)))]
  ].map(([k,v])=>'<div class="telemetry-line"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
  $('inspectDialog').showModal();
 };
