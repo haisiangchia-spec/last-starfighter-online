@@ -643,26 +643,34 @@ function applySwarm(s,orders,stage='full'){
   for(let rotation=0;rotation<6;rotation++){
    gun.d=(gun.d+1)%6;
    events.push('GS-01 DEATH BLOSSOM ROTATION '+(rotation+1)+'/6 · HEADING '+gun.d);
+   const declarations=host.blossomTargets?.[rotation]||{};
+   const laserArc=host.blossomArcs?.[rotation];
+   const selectedArc=[0,1,5].includes(laserArc)?laserArc:0;
    for(const kind of ['laser','particle','missile']){
     if(kind==='particle'&&gun.particleLost||kind==='missile'&&(gun.missileLost||gun.missiles<=0||missileAt[rotation]!==true))continue;
     const count=kind==='laser'?Math.max(0,2-(gun.laserLoss||0)):1;
     for(let weapon=0;weapon<count;weapon++){
-     const candidates=live().filter(([,ship])=>distance(gun,ship)<=(kind==='laser'?10:kind==='particle'?9:8)&&!firingBlocked(gun,ship,rocks)&&arcAllowsSwarm(gun,ship,0));
+     const arc=kind==='laser'?selectedArc:0;
+     const candidates=live().filter(([,ship])=>distance(gun,ship)<=(kind==='laser'?10:kind==='particle'?9:8)&&!firingBlocked(gun,ship,rocks)&&arcAllowsSwarm(gun,ship,arc));
      candidates.sort((a,b)=>distance(gun,a[1])-distance(gun,b[1])||a[0].localeCompare(b[0]));
-     // Each firing is independently declared at this orientation, with
-     // default nearest-legal target if a selected target has already died.
-     const targetId=candidates[0]?.[0];
+     const declared=declarations[weaponId(kind,weapon)];
+     if(declared==='none')continue;
+     const targetId=declared===undefined?candidates[0]?.[0]:candidates.find(([id])=>id===declared)?.[0];
      if(!targetId)continue;
-     const target=out.fleet[targetId];
-     const previousShots=shots.length;
-     shoot(gun,target,'GS-01',targetId,kind,++shotIndex,'host',0);
+     const target=out.fleet[targetId],previousShots=shots.length;
+     const before=Object.fromEntries(live().map(([id])=>[id,hits[id].length]));
+     shoot(gun,target,'GS-01',targetId,kind,++shotIndex,'host',arc);
      if(shots.length===previousShots)continue;
      if(kind==='missile')gun.missiles--;
      if(shots[shots.length-1].hit){
-      // The printed rule removes hit Swarm craft before the next shot.
-      target.dead=true;target.hp=0;
-      hits[targetId]=[];
-      events.push(targetId+' DESTROYED DURING DEATH BLOSSOM');
+      // Missile blast also kills *adjacent* Swarm ships when not contained
+      // by an asteroid; all kills take effect before the next gun fires.
+      for(const [id,ship] of live()){
+       if(hits[id].length>(before[id]??0)){
+        ship.dead=true;ship.hp=0;hits[id]=[];
+        events.push(id+' DESTROYED DURING DEATH BLOSSOM');
+       }
+      }
      }
     }
    }
