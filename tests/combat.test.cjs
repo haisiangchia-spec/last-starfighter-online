@@ -578,3 +578,8 @@ test('all killed pilots count as defeat in the 2v2 victory check',()=>{
  assert.equal(ended.phase,'finished');
  assert.equal(ended.winner,'STAR LEAGUE');
 });
+
+test('Firestore allows movement-only victory without forcing target declaration',()=>{
+ const rules=fs.readFileSync(path.join(__dirname,'../firestore.rules'),'utf8');
+ assert.match(rules,/resource\.data\.phase == 'orders'[\s\S]*?request\.resource\.data\.phase in \['targeting','finished'\]/);
+});
