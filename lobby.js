@@ -25,7 +25,7 @@ function error(e){console.error(e);notice('ERROR: '+(e?.message||String(e)))}
 const slots=['host','guest','host2','guest2'];
 const slotUid=(r,slot)=>r[slot==='host'?'hostUid':slot==='guest'?'guestUid':slot+'Uid'];
 const slotReady=(r,slot)=>!!r[slot==='host'?'hostReady':slot==='guest'?'guestReady':slot+'Ready'];
-const sideOf=slot=>slot.startsWith('host')?'STAR LEAGUE':'KO-DAN';
+const sideOf=slot=>slot.startsWith('host')?'FEDERATION / STAR LEAGUE':'KO-DAN';
 const team=(r,side)=>slots.filter(slot=>slot.startsWith(side)&&!!slotUid(r,slot));
 const launchBlockers=r=>{const h=team(r,'host'),g=team(r,'guest'),missing=[];if(!h.length||!g.length||h.length!==g.length)missing.push('NEED EQUAL TEAMS (CURRENTLY '+h.length+' VS '+g.length+')');if(r.scenario==='swarm')missing.push('SWARM IS VS COMPUTER ONLY · SELECT DUEL');for(const slot of [...h,...g])if(!slotReady(r,slot))missing.push((slot==='host'?'GS-01':slot==='host2'?'GS-02':slot==='guest'?'DF-01':'DF-02')+' NOT READY');return missing};
 const balanced=r=>launchBlockers(r).length===0;
