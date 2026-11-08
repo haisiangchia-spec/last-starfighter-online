@@ -667,3 +667,17 @@ test('Swarm movement resolves ship IDs in order before the Gunstar',()=>{
  assert.ok(a>=0&&b>=0&&gun>=0);
  assert.ok(a<b&&b<gun,'Swarm numerical movement must resolve ahead of Gunstar movement');
 });
+
+test('Swarm lasers resolve before Gunstar weapons during online Swarm firing',()=>{
+ const battle=c.initialSwarm(false);
+ battle.ships.host.q=8;battle.ships.host.r=6;battle.ships.host.d=0;
+ for(const [id,ship] of Object.entries(battle.fleet)){
+  if(id!=='SW-01')ship.dead=true;
+  else{ship.q=9;ship.r=6;ship.d=3}
+ }
+ const out=c.apply(battle,{host:{plan:'',fire:'laser',arc:0,targets:{laser1:'SW-01',laser2:'none'}},guest:{plan:'',fire:'laser',fleetPlans:{}}},'fire');
+ const swarm=out.log.findIndex(line=>line.startsWith('SW-01 LASER'));
+ const star=out.log.findIndex(line=>line.startsWith('GS-01 LASER'));
+ assert.ok(swarm>=0&&star>=0,'Both ships must attempt a shot');
+ assert.ok(swarm<star,'Swarm fire must resolve before Gunstar fire');
+});
