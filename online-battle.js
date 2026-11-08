@@ -599,6 +599,26 @@ function applySwarm(s,orders,stage='full'){
     candidates.sort((a,b)=>distance(gun,a[1])-distance(gun,b[1])||a[0].localeCompare(b[0]));
     const chosen=declaredTarget(out,'host',host,kind,i,arc,candidates[0]?.[0]);
     if(!chosen)continue;
+    const rockTarget=kind==='missile'?parseAsteroidTarget(chosen,rocks):null;
+    if(rockTarget){
+     const preview=availableAsteroidTargets(out,'host',host).find(t=>t.id===chosen);
+     if(!preview)continue;
+     const shotIndex=idx++,a=roll(s.turn*733+shotIndex*79+17),b=roll(s.turn*1181+shotIndex*103+23);
+     const hit=a+b>=preview.toHit;
+     shots.push({side:'host',kind:'missile',hit,from:{q:gun.q,r:gun.r},to:rockTarget});
+     events.push('GS-01 PHOTON MISSILE → '+chosen+': '+a+'+'+b+' VS '+preview.toHit+' '+(hit?'HIT':'MISS'));
+     if(hit){
+      for(const [id,ship] of [['host',gun],...live()]){
+       if(!ship.dead&&ship.q===rockTarget.q&&ship.r===rockTarget.r)hits[id].push('missile');
+      }
+      const rock=rockKey(rockTarget.q,rockTarget.r);
+      rocks.delete(rock);
+      out.asteroids=(out.asteroids||[]).filter(p=>{const [q,r]=rockCoords(p);return rockKey(q,r)!==rock});
+      events.push('MISSILE DESTROYS ASTEROID AT '+rock);
+     }
+     gun.missiles=Math.max(0,gun.missiles-1);
+     continue;
+    }
     const defender=out.fleet[chosen];if(!defender||defender.dead)continue;
     shoot(gun,defender,'GS-01',chosen,kind,idx++,'host',arc);
     if(kind==='missile')gun.missiles=Math.max(0,gun.missiles-1);
