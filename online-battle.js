@@ -295,6 +295,7 @@ function initialDoubles(asteroids=false,seed=1984){
  s.ships.host2={...s.ships.host,q:2,r:9};
  s.ships.guest={...s.ships.guest,q:16,r:4};
  s.ships.guest2={...s.ships.guest,q:16,r:9};
+ if(asteroids)s.asteroids=asteroidField(seed,Object.values(s.ships));
  s.submitted={host:false,guest:false,host2:false,guest2:false};
  s.log=['2v2 SKIRMISH: Four independently controlled fighters. Each pilot submits sealed orders.'];
  return s;
