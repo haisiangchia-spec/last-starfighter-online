@@ -656,3 +656,14 @@ test('Swarm craft cannot plot four moves while the Gunstar can',()=>{
  assert.equal(out.fleet['SW-01'].lastMove,0);
  assert.ok(out.log.some(line=>line.includes('SW-01 INVALID VECTOR')));
 });
+
+test('Swarm movement resolves ship IDs in order before the Gunstar',()=>{
+ const battle=c.initialSwarm(false);
+ const out=c.apply(battle,{host:{plan:'F',fire:'none'},guest:{plan:'',fire:'none',fleetPlans:{'SW-01':'F','SW-02':'F'}}},'move');
+ const log=out.log;
+ const a=log.findIndex(x=>x.includes('SW-01 VECTOR'));
+ const b=log.findIndex(x=>x.includes('SW-02 VECTOR'));
+ const gun=log.findIndex(x=>x.includes('GS-01 VECTOR'));
+ assert.ok(a>=0&&b>=0&&gun>=0);
+ assert.ok(a<b&&b<gun,'Swarm numerical movement must resolve ahead of Gunstar movement');
+});
