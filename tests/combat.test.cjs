@@ -495,7 +495,7 @@ test('target selection phase proposes easiest legal targets and allows splitting
  const outcome=c.apply(s,o,'fire');
  const gun=outcome.lastVolley.shots.filter(x=>x.side==='host'&&x.kind==='laser');
  assert.equal(gun.length,2);
- assert.deepEqual(gun.map(x=>[x.to.q,x.to.r]),[[9,6],[9,7]]);
+ assert.deepEqual(Array.from(gun,x=>[x.to.q,x.to.r]),[[9,6],[9,7]]);
  assert.equal(outcome.turn,2);
 });
 test('explicit HOLD FIRE does not auto-switch to another target',()=>{
