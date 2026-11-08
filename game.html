@@ -112,7 +112,7 @@ function renderLocalTargeting(){
 async function shot(s,kind,arc,declaredId=undefined){
  if(kind==='missile'&&typeof declaredId==='string'&&declaredId.startsWith('asteroid:')){
   const coords=declaredId.slice(9);
-  if(!/^\\d+,\\d+$/.test(coords)||!rocks.has(coords)){log(s.id+' ASTEROID TARGET UNAVAILABLE');return false}
+  if(!/^\d+,\d+$/.test(coords)||!rocks.has(coords)){log(s.id+' ASTEROID TARGET UNAVAILABLE');return false}
   const [q,r]=coords.split(',').map(Number),t={q,r,id:declaredId};
   if(dist(s,t)<1||dist(s,t)>8||!inArc(s,t,0)||blocked(s,t)||rocks.has(key(s.q,s.r))){
    log(s.id+' PHOTON MISSILE — NO CLEAR FIRING SOLUTION');return false;
