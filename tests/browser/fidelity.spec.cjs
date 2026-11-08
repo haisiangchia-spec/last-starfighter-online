@@ -1,6 +1,11 @@
 const {test,expect}=require('@playwright/test');
 const url='/index.html?emulator=1';
 let pilotSequence=0;
+test.afterEach(async({},testInfo)=>{
+ if(testInfo.status===testInfo.expectedStatus)return;
+ console.error('BROWSER FAILURE:',testInfo.title,'status=',testInfo.status);
+ for(const error of testInfo.errors||[])console.error('BROWSER ERROR:',error.message);
+});
 async function openPilot(browser){
  const context=await browser.newContext();const page=await context.newPage();
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
