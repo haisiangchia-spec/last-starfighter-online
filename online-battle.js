@@ -146,6 +146,19 @@ function damageEffects(ship,before,side,events){
 function damageShip(ship,kind,turn,side,events,collisionTable=null){const before={...ship};const salt=teamSide(side)==='host'?19:47;const red=roll(turn*1009+salt),white=roll(turn*3001+salt),table=collisionTable??Math.max(1,Math.min(6,red+(kind==='particle'?1:kind==='missile'?-1:0))),code=damageRows[table-1][white-1];events.push(`${teamSide(side)==='host'?'STAR LEAGUE':'KO-DAN'} DAMAGE ${collisionTable?'COLLISION SPEED '+collisionTable:'RED '+red} WHITE ${white} → TABLE ${table}: ${code}`);for(const part of code.split(',')){const c=part[0],n=Number(part.slice(1))||1;if(c==='F')ship.hull=(ship.hull||0)+n;if(c==='E')ship.engine=(ship.engine||0)+n;if(c==='P'){ship.power=Math.max(0,(ship.power??20)-n);ship.powerPlantHitThisTurn=true}if(c==='T')ship.aim=(ship.aim||0)+1;if(c==='W'){const crew=teamSide(side)==='host'&&roll(turn*587+salt)>3?'gunner':'pilot';const previous=ship[crew]||0;ship[crew]=previous+1;crewInjuryCheck(ship,crew,previous,turn,salt,events,side)}if(c==='K'){const crew=teamSide(side)==='host'&&roll(turn*593+salt)>3?'gunner':'pilot';ship[crew]=6;if(crew==='pilot')ship.killedSpeed=ship.lastMove??0;ship[crew==='pilot'?'unconsciousPilot':'unconsciousGunner']=0}if(c==='D')ship.dead=true;if(c==='X'){const z=roll(turn*511+salt),maxLasers=teamSide(side)==='host'?2:3;if(z<=2){if((ship.laserLoss||0)<maxLasers)ship.laserLoss=(ship.laserLoss||0)+1;else events.push(side.toUpperCase()+' ALL LASER TURRETS ALREADY DESTROYED')}else if(z<=4){if(ship.particleLost)events.push(side.toUpperCase()+' PARTICLE CANNON ALREADY DESTROYED');ship.particleLost=true}else{if(ship.missileLost)events.push(side.toUpperCase()+' MISSILE RACK ALREADY DESTROYED');ship.missileLost=true}events.push(side.toUpperCase()+' WEAPON DESTRUCTION DIE '+z+' → '+(z<=2?'LASER':z<=4?'PARTICLE':'MISSILE'))}if(c==='L'){if(!ship.life)ship.life=6;else events.push(side.toUpperCase()+' REPEATED LIFE SUPPORT HIT · NO ADDITIONAL EFFECT')}if(c==='R')ship.nextRestrict=(ship.nextRestrict||0)+1;if(c==='S')ship.nextStabilizer=(ship.nextStabilizer||0)+1;if(c==='H')ship.nextHalf=(ship.nextHalf||0)+1;if(c==='N')ship.nextConstant=(ship.nextConstant||0)+1}ship.hp=Math.max(0,20-(ship.hull||0));if((ship.hull||0)>=20||(ship.engine||0)>=10)ship.dead=true;if(ship.dead)ship.hp=0;const name=teamSide(side)==='host'?'GS-01':'DF-01';const changes=[['FUSELAGE','hull'],['ENGINE','engine'],['POWER','power'],['TARGETING','aim'],['PILOT','pilot'],['GUNNER','gunner'],['LASERS LOST','laserLoss'],['MISSILES','missiles']].filter(([,k])=>(ship[k]??0)!==(before[k]??0)).map(([label,k])=>label+' '+(before[k]??0)+' → '+(ship[k]??0));for(const [label,k] of [['PARTICLE CANNON','particleLost'],['MISSILE RACK','missileLost'],['DESTROYED','dead']])if(!!ship[k]!==!!before[k])changes.push(label+' '+(ship[k]?'YES':'NO'));for(const [label,k] of [['STEERING RESTRICTION','nextRestrict'],['STABILIZER','nextStabilizer'],['HALF SPEED','nextHalf'],['NO SPEED CHANGE','nextConstant'],['LIFE SUPPORT','life']])if((ship[k]??0)!==(before[k]??0))changes.push(label+' '+(before[k]??0)+' → '+(ship[k]??0));events.push(name+' DAMAGE RESULT: '+(changes.join(' · ')||'NO ADDITIONAL SYSTEM EFFECT'));damageEffects(ship,before,side,events);}
 
 function targetingSnapshot(out,orders,events){
+ // Movement and asteroid collisions can decide the match before target declaration.
+ const defeated=side=>{
+  if(isSwarm(out))return side==='host'?(out.ships.host.dead||out.ships.host.pilot>=6):activeFleet(out).length===0;
+  return activeSlots(out).filter(slot=>teamSide(slot)===side).every(slot=>out.ships[slot].dead||out.ships[slot].pilot>=6);
+ };
+ const hostGone=defeated('host'),guestGone=defeated('guest');
+ if(hostGone||guestGone){
+  out.winner=hostGone&&guestGone?'DRAW':hostGone?'KO-DAN':'STAR LEAGUE';
+  out.phase='finished';
+  out.submitted=Object.fromEntries(Object.keys(out.submitted).map(k=>[k,false]));
+  out.log=['BATTLE OVER DURING MOVEMENT: '+out.winner,...events,...(out.log||[])].slice(0,150);
+  return out;
+ }
  out.phase='targeting';
  out.movementOrders=structuredClone(orders);
  out.submitted=Object.fromEntries(Object.keys(out.submitted).map(k=>[k,false]));
@@ -271,7 +284,7 @@ function applyDoubles(s,orders,stage='full'){
   else{sh.half=sh.nextHalf||0;sh.nextHalf=0;if(sh.deferredConstant&&sh.deferredSpeedTarget!=null){sh.constant=sh.deferredSpeedTarget;sh.deferredConstant=false;sh.deferredSpeedTarget=null}}
  }
  // A pilot casualty alone does not eliminate a fighter: the hull must be destroyed or leave the starfield.
- const defeated=side=>battleSlots.filter(x=>teamSide(x)===side).every(x=>out.ships[x].dead);
+ const defeated=side=>battleSlots.filter(x=>teamSide(x)===side).every(x=>out.ships[x].dead||out.ships[x].pilot>=6);
  out.winner=defeated('host')&&defeated('guest')?'DRAW':defeated('host')?'KO-DAN':defeated('guest')?'STAR LEAGUE':null;
  out.lastVolley={turn:s.turn,shots};out.turn++;out.phase=out.winner?'finished':'orders';
  out.submitted=Object.fromEntries(battleSlots.map(x=>[x,false]));
