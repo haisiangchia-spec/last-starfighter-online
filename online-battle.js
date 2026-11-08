@@ -415,7 +415,7 @@ function applySwarm(s,orders,stage='full'){
   if(range>max||firingBlocked(attacker,defender,rocks)||!arcAllowsSwarm(attacker,defender,arc))return false;
   const base=kind==='laser'?(side==='guest'?4:3):kind==='particle'?4:5;
   const a=roll(s.turn*733+index*79+(side==='host'?17:41)),b=roll(s.turn*1181+index*103+(side==='host'?23:53));
-  const target=base+range-1+Math.min(4,attacker.aim||0),hit=a+b>=target;
+  const target=base+range-1+Math.min(4,attacker.aim||0)+(defender.lastMove===0?-1:0)+(rocks.has(rockKey(attacker.q,attacker.r))?1:0)+(rocks.has(rockKey(defender.q,defender.r))?1:0),hit=a+b>=target;
   shots.push({side,kind,hit,from:{q:attacker.q,r:attacker.r},to:{q:defender.q,r:defender.r}});
   events.push(id+' '+kind.toUpperCase()+' → '+targetId+': '+a+'+'+b+' VS '+target+' '+(hit?'HIT':'MISS'));
   if(hit){
