@@ -1,0 +1,47 @@
+name: Publish failed CI runs for diagnosis
+on:
+  workflow_run:
+    workflows:
+      - Browser and combat fidelity
+      - Browser fidelity and multiplayer E2E
+      - Combat regression tests
+    types: [completed]
+
+permissions:
+  actions: read
+  issues: write
+  contents: read
+
+jobs:
+  index-failure:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish run and failed job IDs as a GitHub Issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          WORKFLOW_NAME: ${{ github.event.workflow_run.name }}
+          COMMIT_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          {
+            echo "Automated diagnostic index for a failed GitHub Actions run."
+            echo
+            echo "- Workflow: ${WORKFLOW_NAME}"
+            echo "- Run: ${RUN_URL}"
+            echo "- Run ID: ${RUN_ID}"
+            echo "- Commit: ${COMMIT_SHA}"
+            echo
+            echo "### Failed jobs and steps"
+            echo
+            gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" \
+              --jq '.jobs[] | select(.conclusion == "failure") | "- **\(.name)** · job ID `\(.id)` · \(.html_url)\n  - Failed steps: \([.steps[]? | select(.conclusion == "failure") | .name] | join(", "))"'
+            echo
+            echo "This report intentionally does not expose raw CI logs. The connected GitHub tools can fetch logs using the job IDs above."
+          } > ci-failure-report.md
+          gh issue create \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "CI failure: ${WORKFLOW_NAME} (run ${RUN_ID})" \
+            --body-file ci-failure-report.md
