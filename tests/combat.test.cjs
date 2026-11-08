@@ -1112,3 +1112,42 @@ test('FASA Swarm Death Blossom rejects insufficient auxiliary power',()=>{
   assert.ok(!result.lastVolley.shots.some(x=>x.side==='host'));
  }
 });
+
+test('FASA Swarm Death Blossom permits per-facing laser arc and explicit HOLD FIRE targets',()=>{
+ const s=c.initialSwarm(false);s.ships.host.power=7;
+ const o={host:{plan:'',fire:'blossom',blossomArcs:[1,0,5,0,0,0],
+   blossomTargets:Array.from({length:6},()=>({laser1:'none',laser2:'none',particle1:'none',missile1:'none'}))},
+   guest:{plan:'',fire:'none',fleetPlans:{}}};
+ const out=c.apply(s,o,'fire');
+ assert.equal(out.log.filter(x=>x.includes('DEATH BLOSSOM ROTATION')).length,6);
+ assert.equal(out.lastVolley.shots.filter(x=>x.side==='host').length,0);
+ assert.equal(out.ships.host.power,0);
+ assert.equal(out.ships.host.missiles,4);
+});
+test('FASA Swarm Death Blossom optional missile is expended and destroys hit Swarm before later shots',()=>{
+ let found=false;
+ for(let turn=1;turn<=100;turn++){
+  const s=c.initialSwarm(false);s.turn=turn;
+  s.ships.host.q=8;s.ships.host.r=6;s.ships.host.d=5;s.ships.host.power=5;
+  for(const [id,ship] of Object.entries(s.fleet)){
+   ship.q=9;ship.r=6;ship.d=3;
+   if(!['SW-01','SW-02'].includes(id))ship.dead=true;
+  }
+  s.fleet['SW-02'].q=9;s.fleet['SW-02'].r=7;
+  const o={host:{plan:'',fire:'blossom',blossomMissiles:[true,false,false,false,false,false],
+    blossomTargets:[{laser1:'none',laser2:'none',particle1:'none',missile1:'SW-01'},...Array.from({length:5},()=>({laser1:'none',laser2:'none',particle1:'none'}))]},
+    guest:{plan:'',fire:'none',fleetPlans:{}}};
+  const out=c.apply(s,o,'fire');
+  assert.equal(out.ships.host.missiles,3,'Explicit optional missile costs one ammunition');
+  assert.equal(out.ships.host.power,0);
+  const shot=out.lastVolley.shots.find(x=>x.side==='host'&&x.kind==='missile');
+  assert.ok(shot,'First facing must fire selected missile');
+  if(shot.hit){
+   assert.equal(out.fleet['SW-01'].dead,true);
+   assert.equal(out.fleet['SW-02'].dead,true,'Adjacent unprotected Swarm Ship is hit by missile blast');
+   assert.ok(out.log.some(x=>x.includes('SW-02 DESTROYED DURING DEATH BLOSSOM')));
+   found=true;break;
+  }
+ }
+ assert.ok(found,'A successful deterministic Death Blossom missile should occur');
+});
