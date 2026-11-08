@@ -63,6 +63,10 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
    await expect(page.locator('#turn')).toHaveText('1',{timeout:30000});
    await expect(page.locator('#asteroidSync')).toContainText('ASTEROID FIELD ACTIVE');
   }
+  const asteroidLabels=await Promise.all(pilots.map(async({page})=>(await page.locator('#asteroidSync').textContent()).trim()));
+  expect(new Set(asteroidLabels).size).toBe(1);
+  expect(asteroidLabels[0]).toMatch(/^ASTEROID FIELD ACTIVE · [0-9]+ ROCKS$/);
+  if(size===2){for(const {page} of pilots){await expect(page.locator('#fleetStatus')).toBeVisible();for(const ship of ['GS-01','GS-02','DF-01','DF-02'])await expect(page.locator('#fleetStatus')).toContainText(ship)}}
   for(let i=0;i<pilots.length;i++){
    await pilots[i].page.locator('#submit').click();
    await expect(pilots[i].page.locator('#status')).not.toContainText('ORDER REJECTED',{timeout:15000});
