@@ -967,3 +967,32 @@ test('FASA p19: asteroid missile burst damages only starships occupying the targ
  assert.equal(hits.guest2.length,0);
  assert.ok(!s.asteroids.includes('4,6'));
 });
+
+test('FASA p21: Swarm without asteroids faces away from Gunstar at printed wave coordinates',()=>{
+ const battle=c.initialSwarm(false,1984);
+ assert.deepEqual([battle.ships.host.q,battle.ships.host.r,battle.ships.host.d],[5,6,0]);
+ assert.equal(battle.asteroids.length,0);
+ for(let i=0;i<14;i++){
+  const id='SW-'+String(i+1).padStart(2,'0');
+  const fighter=battle.fleet[id];
+  assert.deepEqual([fighter.q,fighter.r,fighter.d],[10+2*Math.floor(i/7),3+i%7,0]);
+ }
+ assert.equal(battle.fleet['SW-01'].type,'swarm');
+ assert.deepEqual([battle.ships.guest.q,battle.ships.guest.d],[10,0]);
+});
+test('FASA p21: asteroid Swarm waves face Gunstar from opposite short edges',()=>{
+ for(const seed of [1,1984,2026]){
+  const battle=c.initialSwarm(true,seed);
+  assert.deepEqual([battle.ships.host.q,battle.ships.host.r,battle.ships.host.d],[0,6,0]);
+  const rocks=c.rocksFor(battle);
+  assert.ok(rocks.size>0);
+  for(let i=0;i<14;i++){
+   const id='SW-'+String(i+1).padStart(2,'0');
+   const fighter=battle.fleet[id];
+   assert.deepEqual([fighter.q,fighter.r,fighter.d],[16+2*Math.floor(i/7),3+i%7,3]);
+   assert.ok(!rocks.has(fighter.q+','+fighter.r),'Asteroids cannot overlap starting fighters');
+  }
+  assert.ok(!rocks.has('0,6'),'Gunstar starts in open space');
+  assert.equal(battle.ships.guest.d,3);
+ }
+});
