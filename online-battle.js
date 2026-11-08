@@ -38,7 +38,7 @@ function generateAsteroidField(seed=1984,occupied=[]){
  const ships=occupied.map(p=>typeof p==='string'?{q:Number(p.split(',')[0]),r:Number(p.split(',')[1])}:p);
  const nearShip=(q,r)=>ships.some(p=>distance({q,r},p)<=1);
  const rocks=new Set(),counters=[];
- const total=2+Math.floor(random()*11)+10;
+
  // A fixed candidate catalogue, shuffled using the selected match seed.
  const candidates=[];
  for(let q=6;q<=12;q++)for(let r=2;r<=10;r++)candidates.push({q,r});
@@ -52,6 +52,7 @@ function generateAsteroidField(seed=1984,occupied=[]){
   counters.push({type:'large',hexes:ids});
  }
  if(counters.length!==2)throw Error('No room for two legal seven-hex asteroid counters');
+ const total=2+10+Math.floor(random()*11);
  const singles=[];
  for(let q=5;q<=13;q++)for(let r=0;r<NR;r++)singles.push({q,r});
  for(let i=singles.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[singles[i],singles[j]]=[singles[j],singles[i]]}
