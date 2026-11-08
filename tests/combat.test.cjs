@@ -12,7 +12,7 @@ assert.ok(start>=0&&end>start,'Combat engine source boundaries changed');
 const engine=source.slice(start,end);
 const sandbox={structuredClone,console};
 vm.createContext(sandbox);
-vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget,prepareTemporaryOnline,endTurnDamageOnline,predict,moveLimit,turnLimit,fireControlCrewReason,usableWeaponKinds};',sandbox,{filename:'online-battle.js'});
+vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget,prepareTemporaryOnline,endTurnDamageOnline,predict,moveLimit,turnLimit,fireControlCrewReason,usableWeaponKinds,weaponTargets};',sandbox,{filename:'online-battle.js'});
 const c=sandbox.combat;
 const orders=(host={plan:'',fire:'none'},guest={plan:'',fire:'none'})=>({host,guest});
 function scenario(){const s=c.initial(false);s.log=[];return s}
@@ -895,4 +895,25 @@ test('milestone 2: 2v2 gunstar pilot casualty does not prevent gunner firing whi
  const outcome=c.apply(afterMove,order,'fire');
  assert.ok(outcome.log.some(x=>x.includes('HOST LASER')&&x.includes('GUEST')),
   'Gunner should resolve a laser attack despite dead pilot');
+});
+
+test('milestone 2: 2v2 shot threshold matches preview with shooter inside an asteroid hex',()=>{
+ const state=c.initialDoubles(false);
+ state.ships.host.q=4;state.ships.host.r=4;state.ships.host.d=0;
+ state.ships.guest.q=5;state.ships.guest.r=4;state.ships.guest.lastMove=1;
+ state.asteroids=['4,4'];
+ const orders=Object.fromEntries(Object.keys(state.ships).map(slot=>[slot,{
+  plan:'',fire:slot==='host'?'laser':'none',arc:0,targets:{laser1:'guest',laser2:'guest'}
+ }]));
+ const legal=c.weaponTargets(state,'host','laser',0,0,orders.host);
+ const preview=legal.find(x=>x.id==='guest');
+ assert.ok(preview,'Adjacent target must be legal');
+ const clear=c.initialDoubles(false);
+ clear.ships.host.q=4;clear.ships.host.r=4;clear.ships.host.d=0;
+ clear.ships.guest.q=5;clear.ships.guest.r=4;clear.ships.guest.lastMove=1;
+ const clearPreview=c.weaponTargets(clear,'host','laser',0,0,orders.host).find(x=>x.id==='guest');
+ assert.equal(preview.toHit,clearPreview.toHit+1,'Asteroid should impose +1 target number');
+ const fired=c.apply(state,orders,'fire');
+ assert.ok(fired.log.some(x=>x.includes('HOST LASER')&&x.includes('VS '+preview.toHit)),
+  'Resolved laser target number must equal the on-screen preview');
 });
