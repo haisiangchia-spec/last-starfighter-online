@@ -458,8 +458,10 @@ function applySwarm(s,orders,stage='full'){
  for(const [id,ship] of live()){
   if(ship.power<=0||ship.pilot>=6||ship.unconsciousPilot===1||ship.gunner>=6||ship.unconsciousGunner===1)continue;
   ship.power=Math.max(0,ship.power-1);
-  const n=Math.max(0,3-(ship.laserLoss||0));
-  for(let shot=0;shot<n;shot++)shoot(ship,gun,id,'GS-01','laser',++i*7+shot,'guest',shot===2?3:0);
+  // FASA rules: each Ko-Dan Swarm Ship mounts ONE fixed forward laser.
+  // The Deck Fighter's three-laser loadout must not be reused for Swarm Ships.
+  const n=Math.max(0,1-(ship.laserLoss||0));
+  for(let shot=0;shot<n;shot++)shoot(ship,gun,id,'GS-01','laser',++i*7+shot,'guest',0);
  }
  // Apply damage only after every vessel has completed its firing opportunity.
  for(const [id,kinds] of Object.entries(hits)){
