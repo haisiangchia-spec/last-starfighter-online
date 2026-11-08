@@ -1,0 +1,749 @@
+// Shared FASA tactical engine snapshot for offline AI use.
+// Extracted from online-battle.js to preserve the same mechanics and interface.
+// Keep this core synchronized with online-battle.js until engine module consolidation.
+const dirs=[[1,0],[0,1],[-1,1],[-1,0],[0,-1],[1,-1]];
+const moves=['hold','F','L','R'];const NQ=19,NR=13;
+function parsePlan(plan){if(typeof plan!=='string'||!/^[FLR]{0,5}$/.test(plan))throw Error('Movement must contain 0–5 F/L/R steps.');return [...plan]}
+function moveLimit(s){let n=Math.max(0,(s.type==='swarm'?3:5)-Math.max(Math.floor((s.engine||0)/2),Math.floor((s.hull||0)/4)));if((s.half||0)>=3)n=0;else if(s.half===2)n=n>=3?1:0;else if(s.half===1)n=Math.ceil(n/2);if(s.constant!==null&&s.constant!==undefined)n=Math.min(n,s.constant);return n}
+function turnLimit(s){return Math.max(0,3-Math.max(Math.floor((s.engine||0)/4),Math.floor((s.hull||0)/8)))}
+function predict(ship,plan){const s={...ship};const steps=parsePlan(plan);if(steps.length>moveLimit(s))throw Error('Engine damage limits movement to '+moveLimit(s)+' steps.');if(!s.stabilizer&&(s.pilot||0)<6&&!s.unconsciousPilot&&steps.filter(x=>x!=='F').length>turnLimit(s)&&!s.restrict?.startsWith('lock')&&(s.constant===null||s.constant===undefined))throw Error('System damage limits turns to '+turnLimit(s)+'.');if((s.pilot||0)>=6&&steps.length)throw Error('Pilot killed; movement is uncontrolled.');if(s.unconsciousPilot===1&&steps.length)throw Error('Pilot unconscious.');if(s.restrict==='noL'&&steps.includes('L')||s.restrict==='noR'&&steps.includes('R'))throw Error('Steering restriction prevents this turn.');if(s.restrict?.startsWith('lock')&&steps.some(x=>x!==({lockL:'L',lockR:'R',lockF:'F'}[s.restrict])))throw Error('Steering locked to '+s.restrict+'.');if(s.constant!==null&&s.constant!==undefined&&steps.length!==Math.min(s.constant,moveLimit(s)))throw Error('Constant-speed damage requires '+Math.min(s.constant,moveLimit(s))+' steps.');for(const cmd of steps){const [dq,dr]=dirs[s.d];s.q+=dq;s.r+=dr;if(cmd==='L')s.d=(s.d+5)%6;if(cmd==='R')s.d=(s.d+1)%6;if(s.q<0||s.q>=NQ||s.r<0||s.r>=NR)break}return s}
+const facingNames=['E','SE','SW','W','NW','NE'];
+function facingToTarget(a,b){
+ const dq=b.q-a.q,dr=b.r-a.r;if(dq===0&&dr===0)return 0;
+ let best=0,bestError=Infinity;
+ for(let j=0;j<6;j++){
+  const u=dirs[j],cross=Math.abs(u[0]*dr-u[1]*dq),dot=u[0]*dq+u[1]*dr;
+  if(dot<=0)continue;
+  const error=cross/Math.max(.001,dot);
+  if(error<bestError){bestError=error;best=j}
+ }
+ return best;
+}
+function inArc(a,b){const t=facingToTarget(a,b);return ((t-a.d+6)%6)<=1||((a.d-t+6)%6)<=1}
+
+// House-rule exception to FASA 1984 p.19: no manual placement.
+// Every asteroid-enabled match has exactly two seven-hex counters and
+// a seeded random number (10–20 inclusive) of single-hex counters.
+// The seed determines both the count and layout for multiplayer replay.
+const LARGE_ASTEROID_OFFSETS=[[0,0],...dirs];
+function generateAsteroidField(seed=1984,occupied=[]){
+ let rng=(Number(seed)>>>0)||1;
+ const random=()=>{rng=(Math.imul(1664525,rng)+1013904223)>>>0;return rng/4294967296};
+ const ships=occupied.map(p=>typeof p==='string'?{q:Number(p.split(',')[0]),r:Number(p.split(',')[1])}:p);
+ const nearShip=(q,r)=>ships.some(p=>distance({q,r},p)<=1);
+ const rocks=new Set(),counters=[];
+
+ // A fixed candidate catalogue, shuffled using the selected match seed.
+ const candidates=[];
+ for(let q=6;q<=12;q++)for(let r=2;r<=10;r++)candidates.push({q,r});
+ for(let i=candidates.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[candidates[i],candidates[j]]=[candidates[j],candidates[i]]}
+ for(const center of candidates){
+  if(counters.length>=2)break;
+  const hexes=LARGE_ASTEROID_OFFSETS.map(([dq,dr])=>[center.q+dq,center.r+dr]);
+  if(hexes.some(([q,r])=>q<0||q>=NQ||r<0||r>=NR||nearShip(q,r)||rocks.has(q+','+r)))continue;
+  const ids=hexes.map(([q,r])=>q+','+r);
+  ids.forEach(x=>rocks.add(x));
+  counters.push({type:'large',hexes:ids});
+ }
+ if(counters.length!==2)throw Error('No room for two legal seven-hex asteroid counters');
+ const sourceSeed=(Number(seed)>>>0)||1;
+ const mixedSeed=Math.imul(sourceSeed^(sourceSeed>>>16),0x45d9f3b)>>>0;
+ const total=2+10+mixedSeed%11;
+ const singles=[];
+ for(let q=5;q<=13;q++)for(let r=0;r<NR;r++)singles.push({q,r});
+ for(let i=singles.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[singles[i],singles[j]]=[singles[j],singles[i]]}
+ for(const p of singles){
+  if(counters.length>=total)break;
+  const id=p.q+','+p.r;
+  if(rocks.has(id)||nearShip(p.q,p.r))continue;
+  rocks.add(id);counters.push({type:'small',hexes:[id]});
+ }
+ if(counters.length!==total)throw Error('Cannot place requested number of asteroid counters');
+ return {hexes:[...rocks],counters};
+}
+function asteroidField(seed=1984,occupied=[]){
+ return generateAsteroidField(seed,occupied).hexes;
+}
+const asteroidHexes=asteroidField(1984);const rockKey=(q,r)=>q+','+r;const rockCoords=p=>typeof p==='string'?p.split(',').map(Number):Array.isArray(p)?p:[p.q,p.r];const rocksFor=s=>new Set((s?.asteroids||[]).map(p=>{const [q,r]=rockCoords(p);return rockKey(q,r)}));
+function hexLine(a,b){const n=distance(a,b),line=[];for(let i=1;i<n;i++){
+ const t=i/n,x=a.q+(b.q-a.q)*t,z=a.r+(b.r-a.r)*t,y=-x-z;
+ const rx0=Math.round(x+1e-7),ry0=Math.round(y+1e-7),rz0=Math.round(z-2e-7);
+ let rx=rx0,ry=ry0,rz=rz0;
+ const dx=Math.abs(rx-(x+1e-7)),dy=Math.abs(ry-(y+1e-7)),dz=Math.abs(rz-(z-2e-7));
+ if(dx>dy&&dx>dz)rx=-ry-rz;else if(dy>dz)ry=-rx-rz;else rz=-rx-ry;
+ line.push([rx,rz]);
+}return line}
+function blocked(a,b,rocks){return hexLine(a,b).some(([q,r])=>rocks.has(rockKey(q,r)))}
+// Shared asteroid resolution for 1v1 and 2v2: one check per entered hex.
+function asteroidCollision(ship,rocks,turn,side,step,speed,events){
+ if(!rocks.has(rockKey(ship.q,ship.r)))return false;
+ const salt=teamSide(side)==='host'?17:43;
+ const index=side==='host2'||side==='guest2'?2:0;
+ const d1=roll(turn*977+salt+index*271+step*97),d2=roll(turn*1877+salt+index*379+step*131);
+ ship.asteroidChecks=(ship.asteroidChecks||0)+1;
+ const hit=d1+d2<6;
+ events.push(side.toUpperCase()+' ASTEROID HEX '+ship.q+','+ship.r+': 2D6 '+d1+'+'+d2+'='+(d1+d2)+' VS 6 '+(hit?'COLLISION':'CLEAR'));
+ if(hit){
+  ship.asteroidImpacts=(ship.asteroidImpacts||0)+1;
+  if(ship.type==='swarm'){
+   ship.dead=true;ship.hp=0;
+   events.push('SWARM SHIP DESTROYED BY ASTEROID COLLISION AT '+ship.q+','+ship.r);
+  }else{
+   damageShip(ship,'collision',turn+step*19+index*43,side,events,Math.max(1,Math.min(5,speed)));
+  }
+ }
+ return hit;
+}
+function missileBlast(out,rocks,target,hits,events,source){
+ const rockHit=rocks.has(rockKey(target.q,target.r));
+ for(const [slot,ship] of Object.entries(out.ships)){
+  if(ship.dead)continue;
+  if((rockHit&&ship.q===target.q&&ship.r===target.r)||(!rockHit&&distance(ship,target)<=1)){
+   hits[slot].push('missile');
+   events.push(source.toUpperCase()+' MISSILE BLAST → '+(teamSide(slot)==='host'?'STAR LEAGUE':'KO-DAN')+' '+slot.toUpperCase()+' AT '+ship.q+','+ship.r);
+  }
+ }
+ if(rockHit){
+  out.asteroids=(out.asteroids||[]).filter(p=>{const [q,r]=rockCoords(p);return q!==target.q||r!==target.r});
+  rocks.delete(rockKey(target.q,target.r));
+  events.push('ASTEROID DESTROYED BY PHOTON MISSILE AT '+target.q+','+target.r);
+ }
+}
+function firingBlocked(a,b,rocks){return blocked(a,b,rocks)||(rocks.has(rockKey(a.q,a.r))&&rocks.has(rockKey(b.q,b.r)))}
+const initial=(asteroids=false,seed=1984)=>({scenario:'duel',seed,asteroids:asteroids?asteroidField(seed,[{q:2,r:6},{q:16,r:6}]):[],turn:1,ships:{host:{q:2,r:6,d:0,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false},guest:{q:16,r:6,d:3,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false}},submitted:{host:false,guest:false},phase:'orders',log:['Skirmish initiated. Both pilots must submit orders.'],winner:null});
+
+// Swarm mode keeps a single Gunstar under host control and fourteen individual
+// Ko-Dan contacts under guest control. Each contact has its own sealed vector.
+const isSwarm=s=>s?.scenario==='swarm';
+const swarmIds=()=>Array.from({length:14},(_,i)=>'SW-'+String(i+1).padStart(2,'0'));
+const newSwarmShip=(i)=>({type:'swarm',q:10+Math.floor(i/7)*2,r:3+(i%7),d:0,hp:20,power:20,missiles:0,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:true,missileLost:true,dead:false});
+function initialSwarm(asteroids=false,seed=1984){
+ const s=initial(false,seed);
+ s.scenario='swarm';
+ // FASA 1984 p.21: clear space places the Gunstar 5 hexes in and
+ // the east-facing Swarm at x=10/12. With asteroids both teams
+ // occupy opposite short edges and face one another (x=0 vs 16/18).
+ s.ships.host={...s.ships.host,q:asteroids?0:5,r:6,d:0};
+ s.fleet=Object.fromEntries(swarmIds().map((id,i)=>{
+  const fighter=newSwarmShip(i);
+  if(asteroids){fighter.q=16+2*Math.floor(i/7);fighter.d=3}
+  return [id,fighter];
+ }));
+ s.ships.guest={...s.fleet['SW-01']};
+ if(asteroids){
+  const occupied=[s.ships.host,...Object.values(s.fleet)];
+  s.asteroids=asteroidField(seed,occupied);
+ }
+ s.log=['SWARM MISSION: Gunstar versus fourteen Ko-Dan contacts. Guest plots each surviving fighter.'];
+ return s;
+}
+function enemyContacts(s,side){if(!isSwarm(s))return [s.ships[side==='host'?'guest':'host']];return side==='host'?Object.values(s.fleet||{}).filter(v=>!v.dead):[s.ships.host]}
+function activeFleet(s){return Object.entries(s.fleet||{}).filter(([,ship])=>!ship.dead)}
+
+const battleRef=()=>doc(db,'rooms',room,'combat','state');
+const orderRef=(turn,side,matchId=state?.matchId)=>doc(db,'rooms',room,'combatOrders',`${matchId||'legacy'}_${turn}_${side}`);
+const targetOrderRef=(turn,side,matchId=state?.matchId)=>doc(db,'rooms',room,'combatOrders',`${matchId||'legacy'}_${turn}_${side}_target`);
+function note(msg){$('status').textContent=msg}
+function showBattleResult(){
+ const panel=$('battleResult');if(!panel||!state)return;
+ const finished=state.phase==='finished'||!!state.winner;
+ panel.hidden=!finished;if(!finished)return;
+ const winner=state.winner||'DRAW',draw=winner==='DRAW',won=winner===(teamSide(role)==='host'?'STAR LEAGUE':'KO-DAN');
+ $('resultTitle').textContent=draw?'BATTLE ENDED IN A DRAW':won?'VICTORY · '+winner:'DEFEAT · '+winner+' WINS';
+ $('resultTitle').style.color=draw?'#ffc65b':won?'#55f7ff':'#ff879b';
+ $('resultDescription').textContent=draw?'Both sides have been defeated.':won?'Enemy forces defeated. You have won this skirmish.':'Your forces have been defeated. '+winner+' wins the skirmish.';
+}
+
+function distance(a,b){return(Math.abs(a.q-b.q)+Math.abs(a.r-b.r)+Math.abs((a.q+a.r)-(b.q+b.r)))/2}
+// The damage matrix and subsystem thresholds are adapted directly from game.html.
+const damageRows=[['F1','F1','F1','E1','E1','P1'],['F2,W','F2,R','F2,S','E1,N','E1,H','P2'],['F3','F3','F3','E2','E2','P4'],['F4,W','F4,R','F4,S','E2,N','E2,H','P6'],['F5,W','F5,R','F5,S','E3,N','E3,H','P8'],['F1,X','F1,T','F1,L','E3,P10','K','D']];
+function roll(seed){let x=(seed>>>0)||1;x^=x<<13;x^=x>>>17;x^=x<<5;return 1+(x>>>0)%6}
+function crewThreshold(h){return h===3?8:h===4?10:h>=5?12:0}
+function crewInjuryCheck(ship,crew,previous,turn,salt,events,side){
+ const hits=ship[crew]||0,field=crew==='pilot'?'unconsciousPilot':'unconsciousGunner';
+ if(hits>=6){ship[field]=0;return}
+ if(hits<=2||hits<=previous)return;
+ const threshold=crewThreshold(hits),a=roll(turn*659+salt+hits),b=roll(turn*661+salt+hits),sum=a+b;
+ if(sum<threshold){ship[field]=2;events.push(side.toUpperCase()+' '+crew.toUpperCase()+' INJURY '+sum+' < '+threshold+' · UNCONSCIOUS NEXT TURN')}
+ else events.push(side.toUpperCase()+' '+crew.toUpperCase()+' INJURY '+sum+' >= '+threshold+' · CONSCIOUS');
+}
+function recoverCrewOnline(ship,crew,turn,side,events){
+ const field=crew==='pilot'?'unconsciousPilot':'unconsciousGunner',status=ship[field]||0;
+ if(!status||(ship[crew]||0)>=6)return;
+ if(status===2){ship[field]=1;events.push(side.toUpperCase()+' '+crew.toUpperCase()+' UNCONSCIOUS NEXT TURN');return}
+ const threshold=crewThreshold(ship[crew]||0),salt=side==='host'?37:71,a=roll(turn*733+salt+(crew==='pilot'?1:2)),b=roll(turn*739+salt+(crew==='pilot'?1:2)),sum=a+b;
+ if(sum>=threshold){ship[field]=0;events.push(side.toUpperCase()+' '+crew.toUpperCase()+' RECOVERS '+sum+' >= '+threshold)}
+ else events.push(side.toUpperCase()+' '+crew.toUpperCase()+' STILL UNCONSCIOUS '+sum+' < '+threshold);
+}
+
+// Milestone 2: one end-of-turn status transition for 1v1 and 2v2.
+// Mirrors local prepareTemporary(): stabilizer overrides steering; half speed
+// precedes a deferred constant-speed restriction for two complete turns.
+function prepareTemporaryOnline(ship,turn,side,events){
+ const label=side.toUpperCase(),priorSpeed=ship.lastMove??0;
+ ship.stabilizer=ship.nextStabilizer?1:0;
+ if(ship.stabilizer){
+  if(ship.nextRestrict)events.push(label+' STEERING RESTRICTION IGNORED · STABILIZER TAKES PRECEDENCE');
+  ship.restrict=null;ship.deferredRestrict=0;
+ }else{
+  const options=['lockL','lockF','lockR','noL','noR'];
+  const salt=side==='host'?11:side==='host2'?17:side==='guest'?37:53;
+  ship.restrict=ship.nextRestrict?options[(roll(turn*333+salt)-1)%options.length]:null;
+  ship.deferredRestrict=0;
+ }
+ const newSpeedLock=(ship.nextConstant||0)>0,newHalf=ship.nextHalf||0;
+ ship.constant=null;
+ if(newSpeedLock&&newHalf){
+  ship.deferredSpeedTarget=priorSpeed;
+  ship.deferredSpeedTurns=2;
+  ship.deferredConstant=true;
+  events.push(label+' SPEED CONFLICT · HALF SPEED FOR TWO TURNS, THEN SPEED LOCK '+priorSpeed);
+ }else if(newSpeedLock){
+  ship.constant=priorSpeed;
+  ship.deferredConstant=false;
+  ship.deferredSpeedTurns=0;
+  ship.deferredSpeedTarget=null;
+ }
+ if((ship.deferredSpeedTurns||0)>0){
+  ship.half=Math.max(1,newHalf);
+  ship.deferredSpeedTurns--;
+  ship.deferredConstant=true;
+  events.push(label+' HALF SPEED ACTIVE · '+ship.deferredSpeedTurns+' RESTRICTED TURN(S) REMAIN');
+ }else{
+  ship.half=newHalf;
+  if(ship.deferredConstant&&ship.deferredSpeedTarget!==null&&ship.deferredSpeedTarget!==undefined){
+   ship.constant=ship.deferredSpeedTarget;
+   ship.deferredConstant=false;
+   ship.deferredSpeedTarget=null;
+   events.push(label+' DEFERRED SPEED LOCK ACTIVE · '+ship.constant+' HEXES');
+  }
+ }
+ ship.nextRestrict=0;ship.nextStabilizer=0;ship.nextConstant=0;ship.nextHalf=0;
+ if(ship.restrict)events.push(label+' STEERING RESTRICTION ACTIVE · '+ship.restrict);
+ if(ship.stabilizer)events.push(label+' STABILIZER DAMAGED · RANDOM MANOEUVRE EACH STEP');
+ if(ship.half)events.push(label+' HALF SPEED · '+ship.half+' HIT(S)');
+ if(ship.constant!==null&&ship.constant!==undefined)events.push(label+' CONSTANT SPEED · '+ship.constant+' HEXES');
+}
+function endTurnDamageOnline(ship,turn,side,events){
+ recoverCrewOnline(ship,'pilot',turn,side,events);
+ if(teamSide(side)==='host')recoverCrewOnline(ship,'gunner',turn,side,events);
+ if(ship.life>0){
+  ship.life--;
+  events.push(side.toUpperCase()+' LIFE SUPPORT · '+ship.life+' TURN(S) REMAIN');
+  if(ship.life===0){
+   ship.pilot=6;
+   ship.killedSpeed=ship.lastMove??0;
+   ship.unconsciousPilot=0;
+   events.push(side.toUpperCase()+' LIFE SUPPORT EXPIRED · PILOT KILLED');
+  }
+ }
+ prepareTemporaryOnline(ship,turn,side,events);
+ ship.powerPlantHitThisTurn=false;
+}
+function damageEffects(ship,before,side,events){
+ const id=side==='host'?'GS-01':side==='host2'?'GS-02':side==='guest2'?'DF-02':'DF-01',engineArcs=Math.max(Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)),movement=moveLimit(ship),targeting=Math.min(4,Math.max(engineArcs,ship.aim||0));
+ if(ship.hull!==before.hull)events.push(id+' FUSELAGE +'+(ship.hull-before.hull)+' → '+ship.hull+'/20; mobility '+movement+' hexes; targeting +'+targeting+'.');
+ if(ship.engine!==before.engine)events.push(id+' ENGINE +'+(ship.engine-before.engine)+' → '+ship.engine+'/10; max movement '+movement+' hexes.');
+ if(ship.power!==before.power)events.push(id+' POWER '+before.power+' → '+ship.power+'; '+(ship.power===0?'SHIP DISABLED UNTIL RECHARGE.':'power plant damage recorded.'));
+ if(ship.aim!==before.aim)events.push(id+' TARGETING COMPUTER DAMAGED: attack penalty now +'+targeting+'.');
+ if((ship.nextRestrict||0)>(before.nextRestrict||0))events.push(id+' STEERING RESTRICTION pending for next turn.');
+ if((ship.nextStabilizer||0)>(before.nextStabilizer||0))events.push(id+' STABILIZER DAMAGED: next turn heading randomized.');
+ if((ship.nextHalf||0)>(before.nextHalf||0))events.push(id+' HALF SPEED restriction pending: '+ship.nextHalf+' hit(s), repeated ceiling-halving.');
+ if((ship.nextConstant||0)>(before.nextConstant||0))events.push(id+' NO SPEED CHANGE restriction pending.');
+ if(ship.pilot!==before.pilot||ship.gunner!==before.gunner)events.push(id+' CREW HIT: pilot '+ship.pilot+'/6; gunner '+ship.gunner+'/6.');
+ if(ship.life&&!before.life)events.push(id+' LIFE SUPPORT DAMAGED: countdown '+ship.life+'.');
+ if(ship.laserLoss!==before.laserLoss||ship.particleLost!==before.particleLost||ship.missileLost!==before.missileLost)events.push(id+' WEAPON DESTROYED: lasers lost '+(ship.laserLoss||0)+'; particle '+(ship.particleLost?'OFFLINE':'OK')+'; missiles '+(ship.missileLost?'OFFLINE':'OK')+'.');
+ if(ship.dead&&!before.dead)events.push(id+' EXPLODES / REMOVED FROM ACTIVE PLAY.');
+ if(ship.pilot>=6&&before.pilot<6&&!ship.dead)events.push(id+' PILOT KILLED — CRAFT CONTINUES AT PREVIOUS SPEED WITH RANDOM STABILIZER; GUNNER MAY STILL FIRE.');
+}
+function damageShip(ship,kind,turn,side,events,collisionTable=null){const before={...ship};const salt=teamSide(side)==='host'?19:47;const red=roll(turn*1009+salt),white=roll(turn*3001+salt),table=collisionTable??Math.max(1,Math.min(6,red+(kind==='particle'?1:kind==='missile'?-1:0))),code=damageRows[table-1][white-1];events.push(`${teamSide(side)==='host'?'STAR LEAGUE':'KO-DAN'} DAMAGE ${collisionTable?'COLLISION SPEED '+collisionTable:'RED '+red} WHITE ${white} → TABLE ${table}: ${code}`);for(const part of code.split(',')){const c=part[0],n=Number(part.slice(1))||1;if(c==='F')ship.hull=(ship.hull||0)+n;if(c==='E')ship.engine=(ship.engine||0)+n;if(c==='P'){ship.power=Math.max(0,(ship.power??20)-n);ship.powerPlantHitThisTurn=true}if(c==='T')ship.aim=(ship.aim||0)+1;if(c==='W'){const crew=teamSide(side)==='host'&&roll(turn*587+salt)>3?'gunner':'pilot';const previous=ship[crew]||0;ship[crew]=previous+1;crewInjuryCheck(ship,crew,previous,turn,salt,events,side)}if(c==='K'){const crew=teamSide(side)==='host'&&roll(turn*593+salt)>3?'gunner':'pilot';ship[crew]=6;if(crew==='pilot')ship.killedSpeed=ship.lastMove??0;ship[crew==='pilot'?'unconsciousPilot':'unconsciousGunner']=0}if(c==='D')ship.dead=true;if(c==='X'){const z=roll(turn*511+salt),maxLasers=teamSide(side)==='host'?2:3;if(z<=2){if((ship.laserLoss||0)<maxLasers)ship.laserLoss=(ship.laserLoss||0)+1;else events.push(side.toUpperCase()+' ALL LASER TURRETS ALREADY DESTROYED')}else if(z<=4){if(ship.particleLost)events.push(side.toUpperCase()+' PARTICLE CANNON ALREADY DESTROYED');ship.particleLost=true}else{if(ship.missileLost)events.push(side.toUpperCase()+' MISSILE RACK ALREADY DESTROYED');ship.missileLost=true}events.push(side.toUpperCase()+' WEAPON DESTRUCTION DIE '+z+' → '+(z<=2?'LASER':z<=4?'PARTICLE':'MISSILE'))}if(c==='L'){if(!ship.life)ship.life=6;else events.push(side.toUpperCase()+' REPEATED LIFE SUPPORT HIT · NO ADDITIONAL EFFECT')}if(c==='R')ship.nextRestrict=(ship.nextRestrict||0)+1;if(c==='S')ship.nextStabilizer=(ship.nextStabilizer||0)+1;if(c==='H')ship.nextHalf=(ship.nextHalf||0)+1;if(c==='N')ship.nextConstant=(ship.nextConstant||0)+1}ship.hp=Math.max(0,20-(ship.hull||0));if((ship.hull||0)>=20||(ship.engine||0)>=10)ship.dead=true;if(ship.dead)ship.hp=0;const name=side==='host'?'GS-01':side==='host2'?'GS-02':side==='guest2'?'DF-02':'DF-01';const changes=[['FUSELAGE','hull'],['ENGINE','engine'],['POWER','power'],['TARGETING','aim'],['PILOT','pilot'],['GUNNER','gunner'],['LASERS LOST','laserLoss'],['MISSILES','missiles']].filter(([,k])=>(ship[k]??0)!==(before[k]??0)).map(([label,k])=>label+' '+(before[k]??0)+' → '+(ship[k]??0));for(const [label,k] of [['PARTICLE CANNON','particleLost'],['MISSILE RACK','missileLost'],['DESTROYED','dead']])if(!!ship[k]!==!!before[k])changes.push(label+' '+(ship[k]?'YES':'NO'));for(const [label,k] of [['STEERING RESTRICTION','nextRestrict'],['STABILIZER','nextStabilizer'],['HALF SPEED','nextHalf'],['NO SPEED CHANGE','nextConstant'],['LIFE SUPPORT','life']])if((ship[k]??0)!==(before[k]??0))changes.push(label+' '+(before[k]??0)+' → '+(ship[k]??0));events.push(name+' DAMAGE RESULT: '+(changes.join(' · ')||'NO ADDITIONAL SYSTEM EFFECT'));damageEffects(ship,before,side,events);}
+
+function targetingSnapshot(out,orders,events){
+ // Movement and asteroid collisions can decide the match before target declaration.
+ const defeated=side=>{
+  if(isSwarm(out))return side==='host'?(out.ships.host.dead||out.ships.host.pilot>=6):activeFleet(out).length===0;
+  return activeSlots(out).filter(slot=>teamSide(slot)===side).every(slot=>out.ships[slot].dead||out.ships[slot].pilot>=6);
+ };
+ const hostGone=defeated('host'),guestGone=defeated('guest');
+ if(hostGone||guestGone){
+  out.winner=hostGone&&guestGone?'DRAW':hostGone?'KO-DAN':'STAR LEAGUE';
+  out.phase='finished';
+  out.submitted=Object.fromEntries(Object.keys(out.submitted).map(k=>[k,false]));
+  out.log=['BATTLE OVER DURING MOVEMENT: '+out.winner,...events,...(out.log||[])].slice(0,150);
+  return out;
+ }
+ out.phase='targeting';
+ out.movementOrders=structuredClone(orders);
+ out.submitted=Object.fromEntries(Object.keys(out.submitted).map(k=>[k,false]));
+ out.log=[...events,'MOVEMENT COMPLETE · PILOTS MUST DECLARE WEAPON TARGETS',...(out.log||[])].slice(0,150);
+ return out;
+}
+const battleSlots=['host','guest','host2','guest2'];
+const teamSide=slot=>slot.startsWith('host')?'host':'guest';
+const activeSlots=s=>Object.keys(s.ships).filter(x=>battleSlots.includes(x));
+const allOrdersSubmitted=s=>activeSlots(s).every(slot=>s.submitted[slot]===true);
+function initialDoubles(asteroids=false,seed=1984){
+ const s=initial(asteroids,seed);
+ s.scenario='doubles';
+ s.ships.host={...s.ships.host,q:2,r:4};
+ s.ships.host2={...s.ships.host,q:2,r:9};
+ s.ships.guest={...s.ships.guest,q:16,r:4};
+ s.ships.guest2={...s.ships.guest,q:16,r:9};
+ if(asteroids)s.asteroids=asteroidField(seed,Object.values(s.ships));
+ s.submitted={host:false,guest:false,host2:false,guest2:false};
+ s.log=['2v2 SKIRMISH: Four independently controlled fighters. Each pilot submits sealed orders.'];
+ return s;
+}
+const weaponRanges={laser:10,particle:9,missile:8};
+const weaponLabels={laser:'LASER',particle:'PARTICLE CANNON',missile:'PHOTON MISSILE'};
+const weaponId=(kind,i)=>kind+(i+1);
+// FASA 1984 p.19: a photon missile can deliberately target an asteroid hex.
+const asteroidTargetId=(q,r)=>'asteroid:'+q+','+r;
+function parseAsteroidTarget(id,rocks){
+ if(typeof id!=='string'||!/^asteroid:\d+,\d+$/.test(id))return null;
+ const [q,r]=id.slice(9).split(',').map(Number);
+ return rocks.has(rockKey(q,r))?{q,r}:null;
+}
+function availableAsteroidTargets(battle,slot,order){
+ const ship=battle.ships[slot];
+ if(!ship||ship.dead)return [];
+ const rocks=rocksFor(battle);
+ const penalty=Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)));
+ return [...rocks].map(key=>{const [q,r]=key.split(',').map(Number);return {q,r,id:asteroidTargetId(q,r)}})
+ .filter(target=>distance(ship,target)<=8&&distance(ship,target)>0&&
+  [5,0,1].includes((facingToTarget(ship,target)-ship.d+6)%6)&&!blocked(ship,target,rocks)&&
+  !(rocks.has(rockKey(ship.q,ship.r))))
+ .map(target=>({id:target.id,range:distance(ship,target),toHit:5+distance(ship,target)-1+penalty+1}))
+ .sort((a,b)=>a.toHit-b.toHit||a.id.localeCompare(b.id));
+}
+function weaponArc(slot,order,kind,i){if(kind!=='laser')return 0;if(teamSide(slot)==='host')return Number(order?.arc??0);if(i===2)return 3;return i===0?Number(order?.portLaserArc??0):Number(order?.starboardLaserArc??0)}
+// Match the local game's separate pilot/gunner firing responsibilities.
+function fireControlCrewReason(ship,slot){
+ if(ship.dead)return 'SHIP DESTROYED';
+ if(teamSide(slot)==='host'){
+  if((ship.gunner||0)>=6)return 'GUNNER KILLED · NO FIRING';
+  if(ship.unconsciousGunner===1)return 'GUNNER UNCONSCIOUS · NO FIRING';
+ }else{
+  if((ship.pilot||0)>=6)return 'PILOT KILLED · NO FIRING';
+  if(ship.unconsciousPilot===1)return 'PILOT UNCONSCIOUS · NO FIRING';
+ }
+ if((ship.power??20)<=0)return 'NO POWER · WEAPONS DISABLED';
+ return null;
+}
+function usableWeaponKinds(ship,slot,kinds){
+ return kinds.filter(kind=>
+  (kind!=='laser'||(teamSide(slot)==='host'?2:3)>(ship.laserLoss||0))&&
+  (kind!=='particle'||!ship.particleLost)&&
+  (kind!=='missile'||(!ship.missileLost&&(ship.missiles??0)>0))
+ );
+}
+function weaponTargets(battle,slot,kind,i,arc=0,order=null){
+ const ship=slot==='guest'&&isSwarm(battle)?null:battle.ships[slot];
+ if(!ship||ship.dead)return [];
+ const candidates=isSwarm(battle)?(teamSide(slot)==='host'?activeFleet(battle):[['host',battle.ships.host]]):activeSlots(battle).filter(enemy=>teamSide(enemy)!==teamSide(slot)).map(id=>[id,battle.ships[id]]);
+ const gun=teamSide(slot)==='host',laserArc=weaponArc(slot,order||battle.movementOrders?.[slot]||{arc},kind,i);
+ const allowed=({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[laserArc]||[];
+ const rocks=rocksFor(battle);
+ const targets=candidates.filter(([,enemy])=>!enemy.dead&&!firingBlocked(ship,enemy,rocks)&&distance(ship,enemy)<=weaponRanges[kind]&&allowed.includes((facingToTarget(ship,enemy)-ship.d+6)%6))
+ .map(([id,enemy])=>{
+  const base=kind==='laser'&&isSwarm(battle)&&teamSide(slot)==='guest'?4:kind==='laser'?3:kind==='particle'?4:5;
+  const penalty=isSwarm(battle)?Math.min(4,ship.aim||0):Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)));
+  const toHit=base+Math.max(1,distance(ship,enemy))-1+penalty+(enemy.lastMove===0?-1:0)+(rocks.has(rockKey(ship.q,ship.r))?1:0)+(rocks.has(rockKey(enemy.q,enemy.r))?1:0);
+  return {id,range:distance(ship,enemy),toHit};
+ })
+ ;
+ return [...targets,...(kind==='missile'?availableAsteroidTargets(battle,slot,order):[])].sort((a,b)=>a.toHit-b.toHit||a.range-b.range||a.id.localeCompare(b.id));
+}
+function declaredTarget(battle,slot,order,kind,i,arc,legacyTarget){
+ const selected=order.targets?.[weaponId(kind,i)];
+ if(selected==='none')return null;
+ const legal=weaponTargets(battle,slot,kind,i,arc,order).map(x=>x.id);
+ if(order.targets)return legal.includes(selected)?selected:null;
+ return legacyTarget||legal[0]||null;
+}
+function applyDoubles(s,orders,stage='full'){
+ const out=structuredClone(s),events=['TURN '+s.turn+' / 2v2'],shots=[],hits=Object.fromEntries(battleSlots.map(x=>[x,[]])),rocks=rocksFor(out);
+ const weapons={laser:{range:10,base:3},particle:{range:9,base:4},missile:{range:8,base:5}};
+ if(stage!=='fire')for(const slot of battleSlots){
+  const ship=out.ships[slot],order=orders[slot],label=slot.toUpperCase();
+  if(ship.dead)continue;
+  let steps=[];try{steps=parsePlan(order.plan||'');predict(ship,order.plan||'')}catch(e){events.push(label+' INVALID VECTOR: '+e.message)}
+  if(ship.unconsciousPilot===1)steps=[];
+  if(ship.pilot>=6)steps=Array(Math.min(moveLimit(ship),ship.killedSpeed??ship.lastMove??0)).fill('F');
+  if(ship.stabilizer||ship.pilot>=6)steps=steps.map((_,i)=>{const d=roll(s.turn*1709+battleSlots.indexOf(slot)*47+i*79);return d<=2?'L':d<=4?'F':'R'});
+  ship.lastMove=steps.length;
+  for(let i=0;i<steps.length;i++){
+   const [dq,dr]=dirs[ship.d];ship.q+=dq;ship.r+=dr;
+   if(steps[i]==='L')ship.d=(ship.d+5)%6;
+   if(steps[i]==='R')ship.d=(ship.d+1)%6;
+   if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(label+' LEFT STARFIELD · LOST');break}
+   if(rocks.has(rockKey(ship.q,ship.r))){
+    asteroidCollision(ship,rocks,s.turn,slot,i,steps.length,events);
+    if(ship.dead)break;
+   }
+  }
+  events.push(label+' VECTOR '+(steps.join('')||'HOLD')+' · HEX '+ship.q+','+ship.r);
+ }
+ if(stage==='move')return targetingSnapshot(out,orders,events);
+ // Snapshot post-movement positions. Damage from all attacks is deferred until every fighter fires.
+ for(const slot of battleSlots){
+  const ship=out.ships[slot],o=orders[slot],label=slot.toUpperCase();
+  if(ship.dead||(teamSide(slot)==='host'?(ship.gunner>=6||ship.unconsciousGunner===1):(ship.pilot>=6||ship.unconsciousPilot===1)))continue;
+  if(o.fire==='guard'){if(!(o.plan||'').length){ship.power=Math.min(20,(ship.power??20)+5);events.push(label+' RECHARGES +5 POWER')}continue}
+  const enemies=battleSlots.filter(x=>teamSide(x)!==teamSide(slot)&&!out.ships[x].dead);
+  const targetSlot=enemies.includes(o.target)?o.target:enemies[0];
+  if(!targetSlot)continue;
+  const kinds=(o.fire||'laser').split('+').filter(x=>weapons[x]);
+  if(!kinds.length){if((o.plan||'').length&&ship.power>0)ship.power--;continue}
+  if(ship.power<=0){events.push(label+' INSUFFICIENT POWER');continue}
+  ship.power--;
+  const cap=Math.max(1,3-Math.max(Math.floor((ship.engine||0)/4),Math.floor((ship.hull||0)/8)));
+  let index=0;
+  for(const kind of usableWeaponKinds(ship,slot,kinds).slice(0,cap)){
+   if(kind==='particle'&&ship.particleLost||kind==='missile'&&ship.missileLost)continue;
+   if(kind==='missile'&&ship.missiles<=0)continue;
+   const count=kind==='laser'?Math.max(0,(teamSide(slot)==='host'?2:3)-(ship.laserLoss||0)):1;
+   for(let i=0;i<count;i++){
+    const arc=weaponArc(slot,o,kind,i);
+    const chosen=declaredTarget(out,slot,o,kind,i,arc,targetSlot);
+    if(!chosen)continue;
+    const rockTarget=kind==='missile'?parseAsteroidTarget(chosen,rocks):null;
+    if(rockTarget){
+     const preview=availableAsteroidTargets(out,slot,o).find(t=>t.id===chosen);
+     if(!preview){events.push(label+' PHOTON MISSILE → '+chosen+' NO FIRING SOLUTION');continue}
+     const seed=s.turn*2654435761+battleSlots.indexOf(slot)*739+index++*7331+kind.length*131;
+     const d1=roll(seed),d2=roll(seed+517),hit=d1+d2>=preview.toHit;
+     shots.push({side:slot,kind,hit,from:{q:ship.q,r:ship.r},to:rockTarget});
+     events.push(label+' PHOTON MISSILE → '+chosen+' 2D6 '+d1+'+'+d2+' VS '+preview.toHit+' '+(hit?'HIT':'MISS'));
+     if(hit)missileBlast(out,rocks,rockTarget,hits,events,slot);
+     ship.missiles--;
+     continue;
+    }
+    const enemy=out.ships[chosen];
+    if(!enemy){events.push(label+' INVALID TARGET '+chosen);continue}
+    const relative=(facingToTarget(ship,enemy)-ship.d+6)%6;
+    const allowed=({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[arc]?.includes(relative);
+    const range=distance(ship,enemy);
+    if(firingBlocked(ship,enemy,rocks)||range>weapons[kind].range||!allowed){events.push(label+' '+kind.toUpperCase()+' → '+chosen.toUpperCase()+' NO FIRING SOLUTION');continue}
+    const seed=s.turn*2654435761+battleSlots.indexOf(slot)*739+index++*7331+kind.length*131;
+    const d1=roll(seed),d2=roll(seed+517);
+    const threshold=weapons[kind].base+Math.max(1,range)-1+Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)))+(enemy.lastMove===0?-1:0)+(rocks.has(rockKey(ship.q,ship.r))?1:0)+(rocks.has(rockKey(enemy.q,enemy.r))?1:0);
+    const hit=d1+d2>=threshold;
+    shots.push({side:slot,kind,hit,from:{q:ship.q,r:ship.r},to:{q:enemy.q,r:enemy.r}});
+    events.push(label+' '+kind.toUpperCase()+' → '+chosen.toUpperCase()+' 2D6 '+d1+'+'+d2+' VS '+threshold+' '+(hit?'HIT':'MISS'));
+    if(hit){
+     if(kind==='missile')missileBlast(out,rocks,enemy,hits,events,slot);else hits[chosen].push(kind);
+    }
+    if(kind==='missile')ship.missiles--;
+   }
+  }
+ }
+ for(const slot of battleSlots)for(let i=0;i<hits[slot].length;i++)damageShip(out.ships[slot],hits[slot][i],s.turn*10000+battleSlots.indexOf(slot)*1000+i*37+1,slot,events);
+ for(const slot of battleSlots){
+  const sh=out.ships[slot];endTurnDamageOnline(sh,s.turn,slot,events);
+ }
+ // A pilot casualty alone does not eliminate a fighter: the hull must be destroyed or leave the starfield.
+ const defeated=side=>battleSlots.filter(x=>teamSide(x)===side).every(x=>out.ships[x].dead||out.ships[x].pilot>=6);
+ out.winner=defeated('host')&&defeated('guest')?'DRAW':defeated('host')?'KO-DAN':defeated('guest')?'STAR LEAGUE':null;
+ out.lastVolley={turn:s.turn,shots};out.turn++;out.phase=out.winner?'finished':'orders';
+ out.submitted=Object.fromEntries(battleSlots.map(x=>[x,false]));
+ out.log=[...events,...s.log].slice(0,120);if(out.winner)out.log.unshift('BATTLE OVER: '+out.winner);
+ return out;
+}
+
+function apply(s,orders,stage='full'){
+ if(s.scenario==='doubles')return applyDoubles(s,orders,stage);
+ const out=structuredClone(s),events=[`TURN ${s.turn}`];
+ if(isSwarm(s))return applySwarm(s,orders,stage);
+ if(stage!=='fire')for(const side of ['host','guest']){
+  const ship=out.ships[side],o=orders[side],label=teamSide(side)==='host'?'STAR LEAGUE':'KO-DAN',plan=o.plan??(o.move==='hold'?'':o.move);
+  let steps;
+  try{steps=parsePlan(plan);predict(ship,plan)}catch(e){events.push(label+' INVALID VECTOR: '+e.message+' · HOLD');steps=[]}
+  if(ship.unconsciousPilot===1){steps=[];events.push(label+' PILOT UNCONSCIOUS · SHIP HOLDS POSITION')}
+  if(ship.pilot>=6){steps=Array(Math.min(moveLimit(ship),ship.killedSpeed??ship.lastMove??0)).fill('F');events.push(label+' PILOT KILLED · UNCONTROLLED DRIFT '+steps.length+' HEXES')}
+  if(ship.stabilizer||ship.pilot>=6){
+   steps=steps.map((_,i)=>{const die=roll(s.turn*1709+(teamSide(side)==='host'?31:67)+i*79),cmd=die<=2?'L':die<=4?'F':'R';events.push(label+' STABILIZER DIE '+die+' → '+cmd);return cmd});
+  }
+  ship.lastMove=steps.length;
+  const rocks=rocksFor(out);
+  for(let i=0;i<steps.length;i++){
+   const [dq,dr]=dirs[ship.d];ship.q+=dq;ship.r+=dr;
+   if(steps[i]==='L')ship.d=(ship.d+5)%6;
+   if(steps[i]==='R')ship.d=(ship.d+1)%6;
+   if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(label+' LEFT STARFIELD · LOST');break}
+   if(!rocks.has(rockKey(ship.q,ship.r)))continue;
+   asteroidCollision(ship,rocks,s.turn,side,i,steps.length,events);
+   if(ship.dead)break;
+  }
+  events.push(label+' VECTOR '+(steps.join('')||'HOLD')+' · HEX '+ship.q+','+ship.r+' · FACING '+ship.d);
+ }
+ if(stage==='move')return targetingSnapshot(out,orders,events);
+ // All volleys use post-movement positions, with damage applied only after both sides fire.
+ const firingRocks=rocksFor(out);
+ const hits={host:[],guest:[]},shots=[],weaponData={laser:{range:10,base:3},particle:{range:9,base:4},missile:{range:8,base:5}};
+ function dice(turn,side,kind,index){let x=(turn*2654435761+(teamSide(side)==='host'?101:307)+kind.split('').reduce((a,c)=>a+c.charCodeAt(0),0)+index*7331)>>>0;x^=x<<13;x^=x>>>17;x^=x<<5;return [1+(x>>>0)%6,1+((x>>>9)%6)]}
+ function arcAllows(ship,enemy,arc){const relative=(facingToTarget(ship,enemy)-ship.d+6)%6;return ({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[arc]?.includes(relative)===true}
+ for(const side of ['host','guest']){
+  const ship=out.ships[side],enemySide=teamSide(side)==='host'?'guest':'host',enemy=out.ships[enemySide],o=orders[side],label=teamSide(side)==='host'?'STAR LEAGUE':'KO-DAN';
+  const selection=o.fire??'laser';if(ship.dead||(teamSide(side)==='host'&&ship.gunner>=6)||ship.unconsciousGunner===1||(side==='guest'&&(ship.pilot>=6||ship.unconsciousPilot===1))){events.push(label+' CREW UNCONSCIOUS — WEAPONS DISABLED');continue}
+  if(selection==='guard'){if((o.plan||'').length){events.push(label+' RECHARGE REQUIRES HOLD POSITION');continue}ship.power=Math.min(20,(ship.power??20)+5);events.push(label+' RECHARGES +5 POWER');continue}
+  const kinds=selection.split('+').filter(k=>weaponData[k]);
+  if(!kinds.length){if((o.plan||'').length&&ship.power>0){ship.power--;events.push(label+' MOVEMENT COSTS 1 POWER')}else events.push(label+' HOLDS POSITION / FIRE');continue}
+  const cap=Math.max(1,3-Math.max(Math.floor((ship.engine||0)/4),Math.floor((ship.hull||0)/8)));
+  const available=usableWeaponKinds(ship,side,kinds);
+  const enabled=available.slice(0,cap);
+  if(available.length>cap)events.push(label+' SYSTEM DAMAGE: ONLY '+cap+' WEAPON GROUPS POWERED');
+  if((ship.power??20)<1){events.push(label+' INSUFFICIENT POWER · WEAPONS CANNOT FIRE');continue}
+  // Local game charges one point for an active turn, not one point per weapon.
+  ship.power=Math.max(0,ship.power-1);
+  let shotIndex=0;
+  for(const kind of enabled){
+   if((kind==='particle'&&ship.particleLost)||(kind==='missile'&&ship.missileLost)){events.push(label+' '+kind.toUpperCase()+' OFFLINE');continue}
+   if(kind==='missile'&&(ship.missiles??4)<1){events.push(label+' OUT OF MISSILES');continue}
+   const n=kind==='laser'?Math.max(0,(teamSide(side)==='host'?2:3)-(ship.laserLoss||0)):1;
+   for(let i=0;i<n;i++){
+    const arc=weaponArc(side,o,kind,i);
+    const chosen=declaredTarget(out,side,o,kind,i,arc,enemySide);
+    if(!chosen)continue;
+    const rockTarget=kind==='missile'?parseAsteroidTarget(chosen,firingRocks):null;
+    if(rockTarget){
+     const preview=availableAsteroidTargets(out,side,o).find(t=>t.id===chosen);
+     if(!preview){events.push(label+' PHOTON MISSILE: NO FIRING SOLUTION');continue}
+     const [d1,d2]=dice(s.turn,side,kind,shotIndex++);
+     const hit=d1+d2>=preview.toHit;
+     shots.push({side,kind,hit,from:{q:ship.q,r:ship.r},to:rockTarget});
+     events.push(label+' PHOTON MISSILE → '+chosen+' 2D6 '+d1+'+'+d2+' VS '+preview.toHit+': '+(hit?'HIT':'MISS'));
+     if(hit)missileBlast(out,firingRocks,rockTarget,hits,events,side);
+     ship.missiles--;events.push(label+' PHOTON MISSILE EXPENDED · '+ship.missiles+' REMAINING');
+     continue;
+    }
+    if(!out.ships[chosen]){events.push(label+' INVALID TARGET '+chosen);continue}
+    const range=distance(ship,enemy),rocks=firingRocks;
+    if(firingBlocked(ship,enemy,rocks)){events.push(label+' '+kind.toUpperCase()+' '+(i+1)+': ASTEROID BLOCKS LINE OF SIGHT');continue}
+    if(range>weaponData[kind].range||!arcAllows(ship,enemy,arc)){events.push(label+' '+kind.toUpperCase()+' '+(i+1)+': NO FIRING SOLUTION ('+range+' HEXES / ARC)');continue}
+    const [d1,d2]=dice(s.turn,side,kind,shotIndex++),target=weaponData[kind].base+Math.max(1,range)-1+Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)))+(enemy.lastMove===0?-1:0)+(rocks.has(rockKey(ship.q,ship.r))?1:0)+(rocks.has(rockKey(enemy.q,enemy.r))?1:0),hit=d1+d2>=target;
+    shots.push({side,kind,hit,from:{q:ship.q,r:ship.r},to:{q:enemy.q,r:enemy.r}});
+    if(hit){
+     if(kind==='missile')missileBlast(out,firingRocks,enemy,hits,events,side);else hits[enemySide].push(kind);
+    }
+    events.push(label+' '+kind.toUpperCase()+' '+(i+1)+' 2D6 '+d1+'+'+d2+'='+ (d1+d2)+' VS '+target+': '+(hit?'HIT':'MISS'));
+    if(kind==='missile'){ship.missiles--;events.push(label+' PHOTON MISSILE EXPENDED · '+ship.missiles+' REMAINING')}
+   }
+  }
+ }
+ for(const side of ['host','guest'])for(let i=0;i<hits[side].length;i++){
+  // Separate each hit's damage dice, including simultaneous missile splash.
+  const hitSeed=s.turn*10000+(teamSide(side)==='host'?1000:5000)+i*37+1;
+  damageShip(out.ships[side],hits[side][i],hitSeed,side,events);
+ }
+ for(const side of ['host','guest'])endTurnDamageOnline(out.ships[side],s.turn,side,events);
+ const a=out.ships.host,b=out.ships.guest;
+ out.winner=(a.dead||a.pilot>=6)&&(b.dead||b.pilot>=6)?'DRAW':a.dead||a.pilot>=6?'KO-DAN':b.dead||b.pilot>=6?'STAR LEAGUE':null;
+ out.lastVolley={turn:s.turn,shots};out.turn++;out.phase=out.winner?'finished':'orders';out.submitted={host:false,guest:false};
+ out.log=[...events,...s.log].slice(0,90);if(out.winner)out.log.unshift(`BATTLE OVER: ${out.winner}`);
+ return out;
+}
+
+function applySwarm(s,orders,stage='full'){
+ const out=structuredClone(s),events=['TURN '+s.turn+' / 1v14 SWARM'],shots=[],rocks=rocksFor(out);
+ const gun=out.ships.host,host=orders.host,guest=orders.guest;
+ const fighters=activeFleet(out);
+ // Each vessel plots independently, resolves each entered asteroid hex, and can leave the board.
+ function travel(ship,plan,id,side,index){
+  if(ship.dead)return;
+  if(side==='host'&&ship.blossomRecharge){ship.lastMove=0;events.push('GS-01 DEATH BLOSSOM RECOVERY · NO MOVEMENT');return}
+  let steps=[];
+  try{steps=parsePlan(plan||'');predict(ship,plan||'')}
+  catch(e){events.push(id+' INVALID VECTOR: '+e.message+' · HOLD');steps=[]}
+  if(ship.unconsciousPilot===1){steps=[];events.push(id+' PILOT UNCONSCIOUS · HOLD')}
+  if(ship.pilot>=6)steps=Array(Math.min(moveLimit(ship),ship.killedSpeed??ship.lastMove??0)).fill('F');
+  if(ship.stabilizer||ship.pilot>=6)steps=steps.map((_,i)=>{const die=roll(s.turn*1709+index*47+i*79);return die<=2?'L':die<=4?'F':'R'});
+  ship.lastMove=steps.length;
+  for(let i=0;i<steps.length;i++){
+   const [dq,dr]=dirs[ship.d];ship.q+=dq;ship.r+=dr;
+   if(steps[i]==='L')ship.d=(ship.d+5)%6;
+   if(steps[i]==='R')ship.d=(ship.d+1)%6;
+   if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(id+' LEFT STARFIELD · LOST');break}
+   if(rocks.has(rockKey(ship.q,ship.r))){
+    // Distinct deterministic dice for all fourteen fighters.
+    asteroidCollision(ship,rocks,s.turn+index*101,side,i,steps.length,events);
+    if(ship.dead)break;
+   }
+  }
+  events.push(id+' VECTOR '+(steps.join('')||'HOLD')+' · HEX '+ship.q+','+ship.r);
+ }
+ if(stage!=='fire'){
+ // FASA sequence: Swarm ships move in numerical order, then the Gunstar.
+ for(let i=0;i<fighters.length;i++){const [id,ship]=fighters[i];travel(ship,guest.fleetPlans?.[id]||'',id,'guest',i+1)}
+ travel(gun,host.plan,'GS-01','host',0);
+ }
+ if(stage==='move')return targetingSnapshot(out,orders,events);
+ const live=()=>activeFleet(out);
+ // Record the complete volley before applying weapon damage, preserving simultaneous fire.
+ const hits={host:[],...Object.fromEntries(swarmIds().map(id=>[id,[]]))};
+ function shoot(attacker,defender,id,targetId,kind,index,side,arc=0){
+  if(attacker.dead||defender.dead)return false;
+  const range=distance(attacker,defender),max=kind==='laser'?10:kind==='particle'?9:8;
+  if(range>max||firingBlocked(attacker,defender,rocks)||!arcAllowsSwarm(attacker,defender,arc))return false;
+  const base=kind==='laser'?(side==='guest'?4:3):kind==='particle'?4:5;
+  const a=roll(s.turn*733+index*79+(side==='host'?17:41)),b=roll(s.turn*1181+index*103+(side==='host'?23:53));
+  const target=base+range-1+Math.min(4,attacker.aim||0)+(defender.lastMove===0?-1:0)+(rocks.has(rockKey(attacker.q,attacker.r))?1:0)+(rocks.has(rockKey(defender.q,defender.r))?1:0),hit=a+b>=target;
+  shots.push({side,kind,hit,from:{q:attacker.q,r:attacker.r},to:{q:defender.q,r:defender.r}});
+  events.push(id+' '+kind.toUpperCase()+' → '+targetId+': '+a+'+'+b+' VS '+target+' '+(hit?'HIT':'MISS'));
+  if(hit){
+   if(kind==='missile'){
+    // Missile blast can damage friendly vessels as well as enemies.
+    const rockHit=rocks.has(rockKey(defender.q,defender.r));
+    for(const [slot,ship] of [['host',gun],...live()]){
+     if(!ship.dead&&((rockHit&&ship.q===defender.q&&ship.r===defender.r)||(!rockHit&&distance(ship,defender)<=1)))hits[slot].push(kind);
+    }
+    if(rockHit){
+     const key=rockKey(defender.q,defender.r);rocks.delete(key);out.asteroids=(out.asteroids||[]).filter(p=>{const [q,r]=rockCoords(p);return rockKey(q,r)!==key});
+     events.push('MISSILE DESTROYS ASTEROID AT '+key);
+    }
+   }else hits[targetId==='GS-01'?'host':targetId].push(kind);
+  }
+  return true;
+ }
+ let i=0;
+ for(const [id,ship] of live()){
+  if(ship.power<=0||ship.pilot>=6||ship.unconsciousPilot===1||ship.gunner>=6||ship.unconsciousGunner===1)continue;
+  ship.power=Math.max(0,ship.power-1);
+  // FASA rules: each Ko-Dan Swarm Ship mounts ONE fixed forward laser.
+  // The Deck Fighter's three-laser loadout must not be reused for Swarm Ships.
+  const n=Math.max(0,1-(ship.laserLoss||0));
+  for(let shot=0;shot<n;shot++)shoot(ship,gun,id,'GS-01','laser',++i*7+shot,'guest',0);
+ }
+ // FASA 1984 p.21: Swarm fires first. Only then may the Gunstar
+ // activate Death Blossom. Six clockwise firing steps start one side
+ // clockwise from its original facing and end at the original facing.
+ const blossomRequested=host.fire==='blossom';
+ const recoveringFromBlossom=!!gun.blossomRecharge;
+ const blossomEligible=!gun.dead&&gun.gunner<6&&gun.unconsciousGunner!==1&&gun.power>=4&&gun.power<=10&&!gun.blossomRecharge;
+ if(gun.blossomRecharge){
+  // Mandatory recovery turn: no movement, weapon fire or alternate orders.
+  if(!gun.powerPlantHitThisTurn){
+   gun.power=Math.min(20,gun.power+5);
+   events.push('GS-01 MANDATORY DEATH BLOSSOM RECHARGE +5 POWER');
+  }else events.push('GS-01 DEATH BLOSSOM RECHARGE INTERRUPTED');
+  gun.blossomRecharge=false;
+ }else if(blossomRequested&&blossomEligible){
+  const originalFacing=gun.d;
+  // Each entry grants one optional photon missile at that orientation.
+  // All functioning lasers and the particle cannon fire automatically.
+  const missileAt=Array.isArray(host.blossomMissiles)?host.blossomMissiles:[];
+  let shotIndex=0;
+  events.push('GS-01 ACTIVATES DEATH BLOSSOM · SIX CLOCKWISE FACINGS');
+  for(let rotation=0;rotation<6;rotation++){
+   gun.d=(gun.d+1)%6;
+   events.push('GS-01 DEATH BLOSSOM ROTATION '+(rotation+1)+'/6 · HEADING '+gun.d);
+   const declarations=host.blossomTargets?.[rotation]||{};
+   const laserArc=host.blossomArcs?.[rotation];
+   const selectedArc=[0,1,5].includes(laserArc)?laserArc:0;
+   for(const kind of ['laser','particle','missile']){
+    if(kind==='particle'&&gun.particleLost||kind==='missile'&&(gun.missileLost||gun.missiles<=0||missileAt[rotation]!==true))continue;
+    const count=kind==='laser'?Math.max(0,2-(gun.laserLoss||0)):1;
+    for(let weapon=0;weapon<count;weapon++){
+     const arc=kind==='laser'?selectedArc:0;
+     const candidates=live().filter(([,ship])=>distance(gun,ship)<=(kind==='laser'?10:kind==='particle'?9:8)&&!firingBlocked(gun,ship,rocks)&&arcAllowsSwarm(gun,ship,arc));
+     candidates.sort((a,b)=>distance(gun,a[1])-distance(gun,b[1])||a[0].localeCompare(b[0]));
+     const declared=declarations[weaponId(kind,weapon)];
+     if(declared==='none')continue;
+     const targetId=declared===undefined?candidates[0]?.[0]:candidates.find(([id])=>id===declared)?.[0];
+     if(!targetId)continue;
+     const target=out.fleet[targetId],previousShots=shots.length;
+     const before=Object.fromEntries(live().map(([id])=>[id,hits[id].length]));
+     shoot(gun,target,'GS-01',targetId,kind,++shotIndex,'host',arc);
+     if(shots.length===previousShots)continue;
+     if(kind==='missile')gun.missiles--;
+     if(shots[shots.length-1].hit){
+      // Missile blast also kills *adjacent* Swarm ships when not contained
+      // by an asteroid; all kills take effect before the next gun fires.
+      for(const [id,ship] of live()){
+       if(hits[id].length>(before[id]??0)){
+        ship.dead=true;ship.hp=0;hits[id]=[];
+        events.push(id+' DESTROYED DURING DEATH BLOSSOM');
+       }
+      }
+     }
+    }
+   }
+  }
+  gun.d=originalFacing;
+  gun.power=0;gun.blossomRecharge=true;
+  events.push('GS-01 DEATH BLOSSOM FINISHED · POWER 0 · NEXT TURN MUST RECHARGE');
+ }else if(blossomRequested){
+  events.push('GS-01 DEATH BLOSSOM UNAVAILABLE · REQUIRES 4–10 POWER AND OPERATIONAL GUNNER');
+ }
+ const selected=(host.fire||'none').split('+').filter(k=>['laser','particle','missile'].includes(k));
+ if(recoveringFromBlossom||blossomRequested){/* Death Blossom or recovery already handled above. */}
+ else if(host.fire==='guard'&&!(host.plan||'').length){gun.power=Math.min(20,gun.power+5);events.push('GS-01 RECHARGES +5 POWER')}
+ else if(!gun.dead&&gun.power>0&&gun.gunner<6&&gun.unconsciousGunner!==1){
+  if(selected.length||host.plan){gun.power=Math.max(0,gun.power-1)}
+  const cap=Math.max(1,3-Math.max(Math.floor((gun.engine||0)/4),Math.floor((gun.hull||0)/8)));
+  let idx=0;
+  for(const kind of selected.slice(0,cap)){
+   if(kind==='particle'&&gun.particleLost||kind==='missile'&&(gun.missileLost||!gun.missiles))continue;
+   const n=kind==='laser'?Math.max(0,2-(gun.laserLoss||0)):1;
+   for(let i=0;i<n;i++){
+    const arc=kind==='laser'?Number(host.arc??0):0;
+    const candidates=live().filter(([,ship])=>distance(gun,ship)<=(kind==='laser'?10:kind==='particle'?9:8)&&!firingBlocked(gun,ship,rocks)&&arcAllowsSwarm(gun,ship,arc));
+    candidates.sort((a,b)=>distance(gun,a[1])-distance(gun,b[1])||a[0].localeCompare(b[0]));
+    const chosen=declaredTarget(out,'host',host,kind,i,arc,candidates[0]?.[0]);
+    if(!chosen)continue;
+    const rockTarget=kind==='missile'?parseAsteroidTarget(chosen,rocks):null;
+    if(rockTarget){
+     const preview=availableAsteroidTargets(out,'host',host).find(t=>t.id===chosen);
+     if(!preview)continue;
+     const shotIndex=idx++,a=roll(s.turn*733+shotIndex*79+17),b=roll(s.turn*1181+shotIndex*103+23);
+     const hit=a+b>=preview.toHit;
+     shots.push({side:'host',kind:'missile',hit,from:{q:gun.q,r:gun.r},to:rockTarget});
+     events.push('GS-01 PHOTON MISSILE → '+chosen+': '+a+'+'+b+' VS '+preview.toHit+' '+(hit?'HIT':'MISS'));
+     if(hit){
+      for(const [id,ship] of [['host',gun],...live()]){
+       if(!ship.dead&&ship.q===rockTarget.q&&ship.r===rockTarget.r)hits[id].push('missile');
+      }
+      const rock=rockKey(rockTarget.q,rockTarget.r);
+      rocks.delete(rock);
+      out.asteroids=(out.asteroids||[]).filter(p=>{const [q,r]=rockCoords(p);return rockKey(q,r)!==rock});
+      events.push('MISSILE DESTROYS ASTEROID AT '+rock);
+     }
+     gun.missiles=Math.max(0,gun.missiles-1);
+     continue;
+    }
+    const defender=out.fleet[chosen];if(!defender||defender.dead)continue;
+    shoot(gun,defender,'GS-01',chosen,kind,idx++,'host',arc);
+    if(kind==='missile')gun.missiles=Math.max(0,gun.missiles-1);
+   }
+  }
+ }
+ // Apply damage only after every vessel has completed its firing opportunity.
+ for(const [id,kinds] of Object.entries(hits)){
+  const ship=id==='host'?gun:out.fleet[id],side=id==='host'?'host':'guest';
+  if(!ship||!kinds.length)continue;
+  // FASA Swarm Ship rule: any successful hit destroys it outright.
+  // Damage to the Gunstar still uses the normal damage tables.
+  if(id!=='host'){
+   ship.dead=true;ship.hp=0;
+   events.push(id+' DESTROYED — SWARM SHIP ELIMINATED BY ONE HIT');
+   continue;
+  }
+  for(let i=0;i<kinds.length&&!ship.dead;i++)damageShip(ship,kinds[i],s.turn*97+i*37,side,events);
+ }
+ // Every mode now uses the same FASA end-of-turn crew, life-support,
+ // steering and deferred-speed transitions. Surviving Swarm craft
+ // rarely carry damage because one successful weapon hit destroys them.
+ for(const [id,ship] of [['GS-01',gun],...Object.entries(out.fleet)]){
+  if(!ship.dead)endTurnDamageOnline(ship,s.turn,id==='GS-01'?'host':'guest',events);
+ }
+ const fleetGone=activeFleet(out).length===0;
+ const gunLost=gun.dead||gun.pilot>=6;
+ out.winner=gunLost&&fleetGone?'DRAW':gunLost?'KO-DAN':fleetGone?'STAR LEAGUE':null;
+ out.lastVolley={turn:s.turn,shots};out.turn++;out.phase=out.winner?'finished':'orders';out.submitted={host:false,guest:false};
+ out.log=[...(out.winner?['BATTLE OVER: '+out.winner]:[]),...events,...s.log].slice(0,150);
+ return out;
+}
+function arcAllowsSwarm(ship,enemy,arc){const relative=(facingToTarget(ship,enemy)-ship.d+6)%6;return ({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[arc]?.includes(relative)===true}
+
+
+export {initial,initialSwarm,initialDoubles,apply,applySwarm,predict,moveLimit,turnLimit,weaponTargets,weaponArc,usableWeaponKinds,fireControlCrewReason,rocksFor,distance,hexLine,blocked,facingToTarget,dirs,NQ,NR,activeFleet,activeSlots,isSwarm,rockKey,damageRows};
