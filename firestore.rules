@@ -65,7 +65,7 @@ service cloud.firestore {
               && resource.data.submitted.host == true && resource.data.submitted.guest == true
               && (!('host2' in resource.data.submitted) || resource.data.submitted.host2 == true)
               && (!('guest2' in resource.data.submitted) || resource.data.submitted.guest2 == true)
-              && request.resource.data.phase == 'targeting'
+              && request.resource.data.phase in ['targeting','finished']
               && request.resource.data.turn == resource.data.turn)
           || (resource.data.phase == 'targeting'
               && resource.data.submitted.host == true && resource.data.submitted.guest == true
