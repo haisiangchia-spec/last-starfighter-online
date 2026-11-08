@@ -414,3 +414,43 @@ test('local shared tactical screen can restart with randomized clustered asteroi
  expect(new Set(battle.asteroids).size).toBe(battle.asteroids.length);
  expect(errors).toEqual([]);
 });
+
+test('local Swarm shares multiplayer targeting controls for six Death Blossom rotations',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/local-battle.html?scenario=swarm&asteroids=off&battle_test=1');
+ await page.evaluate(()=>window.__localBattleTest.setGunstarPower(8));
+ await page.locator('#submit').click();
+ await expect(page.locator('#targetingPanel')).toBeVisible();
+ await expect(page.locator('#blossom')).toBeEnabled();
+ await page.locator('#blossom').click();
+ await expect(page.locator('#blossom')).toHaveText('CANCEL DEATH BLOSSOM');
+ await expect(page.locator('#submit')).toHaveText('FIRE DEATH BLOSSOM');
+ await expect(page.locator('.blossom-arc')).toHaveCount(6);
+ await expect(page.locator('#weaponTargetRows')).toContainText('ROTATION 6/6');
+ await page.locator('.blossom-arc').first().selectOption('5');
+ await expect(page.locator('.blossom-arc').first()).toHaveValue('5');
+ await page.locator('#blossom').click();
+ await expect(page.locator('#blossom')).toHaveText('DEATH BLOSSOM');
+ await expect(page.locator('#submit')).toHaveText('LOCK WEAPON TARGETS');
+ expect(errors).toEqual([]);
+});
+test('shared local AI map supports click-to-inspect and firing arc toggling',async({page})=>{
+ await page.goto('/local-battle.html?scenario=duel&asteroids=off&seed=1984');
+ const canvas=page.locator('#map');
+ await expect(canvas).toBeVisible();
+ const initial=await page.locator('#toggleArcs').textContent();
+ await page.locator('#toggleArcs').click();
+ expect(await page.locator('#toggleArcs').textContent()).not.toBe(initial);
+ const {x,y}=await page.evaluate(()=>{
+  const c=document.getElementById('map'),b=c.getBoundingClientRect();
+  const R=Math.min((c.width-50)/(Math.sqrt(3)*(19+13/2)),(c.height-50)/(1.5*13+.5));
+  const cx=c.width/2-Math.sqrt(3)*(19/2+13/4)*R,cy=c.height/2-1.5*(13-1)/2*R;
+  const p=window.__localBattleTest.state().ships.host;
+  return {x:b.left+(cx+Math.sqrt(3)*(p.q+p.r/2)*R)*b.width/c.width,y:b.top+(cy+1.5*p.r*R)*b.height/c.height};
+ });
+ await page.mouse.click(x,y);
+ await expect(page.locator('#inspectDialog')).toBeVisible();
+ await expect(page.locator('#inspectTitle')).toContainText('GS-01');
+ await page.locator('#closeInspect').click();
+ await expect(page.locator('#inspectDialog')).toBeHidden();
+});
