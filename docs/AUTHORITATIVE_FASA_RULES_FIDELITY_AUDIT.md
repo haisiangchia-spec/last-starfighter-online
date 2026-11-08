@@ -80,3 +80,9 @@ For future interactive Swarm support, orders may include `blossomArcs[rotation]`
 **Important:** Swarm matchmaking remains forbidden in the online lobby and Firestore rules. Thus this is an **engine implementation**, not a claim that users can activate Death Blossom in online multiplayer today. Local `game.html` still supplies the interactive Death Blossom experience. Browser end-to-end validation, including full rotation-selection UI and networked Swarm sequencing, remains an acceptance gap.
 
 Tests: the isolated source-level harness passed **98/98** including power boundaries, recovery, optional missile, immediate splash deaths and hold-fire declarations. CI subsequently exposed a Node VM cross-realm array `deepStrictEqual` assertion in the asteroid layout test; this has been corrected in commit `065d7fa`, but the latest CI run is not yet verified.
+
+## Milestone 2 current acceptance status (2026-11-08)
+
+Status: IN PROGRESS. A total of 101 source-level combat regression tests have passed, including integrated multi-turn life-support and deferred-speed tests. The Swarm engine now shares the end-of-turn damage transition with Duel and 2v2; pilot death is distinct from hull destruction.
+
+Browser coverage now checks seeded asteroid counts and initial ship clearance. Milestone 2 will be marked achieved only after the current commit has positive green results for combat regression, browser and combat fidelity, and multiplayer E2E workflows, and no unresolved critical damage-rule mismatches. Older CI failure issues refer to earlier commits and do not establish the result of the current commit.
