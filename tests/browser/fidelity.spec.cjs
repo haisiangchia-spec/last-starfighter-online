@@ -325,7 +325,7 @@ for(const size of [1,2])test('release gate: real '+size+'v'+size+' completes fro
    const page=pilots[i].page;
    await page.reload();
    await expect(page.locator('#battleResult')).toBeVisible({timeout:30000});
-   await expect(page.locator('#resultTitle')).toContainText(i<size?'VICTORY · STAR LEAGUE':'DEFEAT · STAR LEAGUE');
+   await expect(page.locator('#resultTitle')).toContainText(factions[i]==='host'?'VICTORY · STAR LEAGUE':'DEFEAT · STAR LEAGUE');
   }
   for(const pilot of pilots)expect(pilot.errors).toEqual([]);
  }finally{await Promise.all(pilots.map(p=>p.context.close()))}
