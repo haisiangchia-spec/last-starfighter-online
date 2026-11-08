@@ -52,7 +52,9 @@ function generateAsteroidField(seed=1984,occupied=[]){
   counters.push({type:'large',hexes:ids});
  }
  if(counters.length!==2)throw Error('No room for two legal seven-hex asteroid counters');
- const total=2+10+Math.floor(random()*11);
+ const sourceSeed=(Number(seed)>>>0)||1;
+ const mixedSeed=Math.imul(sourceSeed^(sourceSeed>>>16),0x45d9f3b)>>>0;
+ const total=2+10+mixedSeed%11;
  const singles=[];
  for(let q=5;q<=13;q++)for(let r=0;r<NR;r++)singles.push({q,r});
  for(let i=singles.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[singles[i],singles[j]]=[singles[j],singles[i]]}
