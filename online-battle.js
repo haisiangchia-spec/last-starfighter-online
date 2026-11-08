@@ -351,7 +351,7 @@ function applyDoubles(s,orders,stage='full'){
     if(firingBlocked(ship,enemy,rocks)||range>weapons[kind].range||!allowed){events.push(label+' '+kind.toUpperCase()+' → '+chosen.toUpperCase()+' NO FIRING SOLUTION');continue}
     const seed=s.turn*2654435761+battleSlots.indexOf(slot)*739+index++*7331+kind.length*131;
     const d1=roll(seed),d2=roll(seed+517);
-    const threshold=weapons[kind].base+Math.max(1,range)-1+Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)))+(enemy.lastMove===0?-1:0);
+    const threshold=weapons[kind].base+Math.max(1,range)-1+Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)))+(enemy.lastMove===0?-1:0)+(rocks.has(rockKey(ship.q,ship.r))?1:0)+(rocks.has(rockKey(enemy.q,enemy.r))?1:0);
     const hit=d1+d2>=threshold;
     shots.push({side:slot,kind,hit,from:{q:ship.q,r:ship.r},to:{q:enemy.q,r:enemy.r}});
     events.push(label+' '+kind.toUpperCase()+' → '+chosen.toUpperCase()+' 2D6 '+d1+'+'+d2+' VS '+threshold+' '+(hit?'HIT':'MISS'));
