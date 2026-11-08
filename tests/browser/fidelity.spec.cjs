@@ -31,6 +31,14 @@ test('local hot-seat requires separate sealed orders and advances after both pla
  await expect(page.locator('#status')).toContainText('KO-DAN');
  await expect(page.locator('#turn')).toHaveText('01');
  await page.locator('#execute').click();
+ await expect(page.locator('#phase')).toHaveText('TARGETING',{timeout:30000});
+ await expect(page.locator('#localTargetPanel')).toBeVisible();
+ await expect(page.locator('#status')).toContainText('STAR LEAGUE');
+ await page.locator('#execute').click();
+ await expect(page.locator('#status')).toContainText('KO-DAN');
+ await page.locator('#execute').click();
+ await expect(page.locator('#phase')).toHaveText('TARGETING',{timeout:30000});
+ await page.locator('#execute').click();
  await expect(page.locator('#turn')).toHaveText('02',{timeout:30000});
 });
 test('local hot-seat keeps orders sealed and advances through three complete turns',async({page})=>{
@@ -42,6 +50,12 @@ test('local hot-seat keeps orders sealed and advances through three complete tur
   await page.locator('#execute').click();
   await expect(page.locator('#status')).toContainText('KO-DAN');
   await expect(page.locator('#turn')).toHaveText(String(round).padStart(2,'0'));
+  await page.locator('#execute').click();
+  await expect(page.locator('#phase')).toHaveText('TARGETING',{timeout:30000});
+  await expect(page.locator('#localTargetPanel')).toBeVisible();
+  await expect(page.locator('#status')).toContainText('STAR LEAGUE');
+  await page.locator('#execute').click();
+  await expect(page.locator('#status')).toContainText('KO-DAN');
   await page.locator('#execute').click();
   await expect(page.locator('#turn')).toHaveText(String(round+1).padStart(2,'0'),{timeout:30000});
  }
