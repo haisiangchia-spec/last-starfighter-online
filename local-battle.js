@@ -4,7 +4,8 @@ const $=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
 let scenario=params.get('scenario')==='swarm'?'swarm':'duel';
 let asteroids=params.get('asteroids')!=='off',seed=Number(params.get('seed'))||1984;
-let state, movementOrders=null, targetDraft={}, selectedWeapon='laser', zoom=1, showArcs=true;
+let state, movementOrders=null, targetDraft={}, zoom=1, showArcs=true;
+let blossomMode=false,blossomArcs=Array(6).fill(0),blossomMissiles=Array(6).fill(false),blossomTargets=Array.from({length:6},()=>({}));
 const face=['EAST','SOUTHEAST','SOUTHWEST','WEST','NORTHWEST','NORTHEAST'];
 const player=()=>state?.ships.host;
 const enemy=()=>isSwarm(state)?activeFleet(state).map(([id,s])=>({id,...s})):state?[{id:'DF-01',...state.ships.guest}]:[];
@@ -45,7 +46,7 @@ function start(){
  if(!Number.isInteger(seed)||seed<1||seed>4294967295){message('ENTER A VALID BATTLE SEED');return}
  state=scenario==='swarm'?initialSwarm(asteroids,seed):initial(asteroids,seed);
  state.log=['LOCAL AI '+scenario.toUpperCase()+' · SEED '+seed,...state.log];
- movementOrders=null;targetDraft={};$('plan').value='';
+ movementOrders=null;targetDraft={};blossomMode=false;blossomArcs=Array(6).fill(0);blossomMissiles=Array(6).fill(false);blossomTargets=Array.from({length:6},()=>({}));$('plan').value='';
  $('laser').checked=true;$('particle').checked=true;$('missile').checked=false;
  render();
 }
@@ -81,24 +82,51 @@ function firingTargets(){
  }
  return rows.join('')||'<small>No legal weapon targets. You may hold fire.</small>';
 }
+
+function blossomRows(){
+ const ship=player(),rows=['<div class="movement-restrictions warning"><strong>DEATH BLOSSOM · SIX CLOCKWISE FIRING ORIENTATIONS</strong><p>All operational lasers and particle cannon fire at every orientation unless you select HOLD FIRE. Up to four optional photon missiles can be allocated. Each shot resolves before the next.</p></div>'];
+ for(let r=0;r<6;r++){
+  const heading=(ship.d+r+1)%6,aim=structuredClone(state);
+  aim.ships.host.d=heading;
+  const arc=blossomArcs[r];
+  rows.push('<section class="panel" style="padding:10px"><strong>ROTATION '+(r+1)+'/6 · '+face[heading]+'</strong>');
+  rows.push('<label>LASER TURRET ARC</label><select class="blossom-arc" data-rotation="'+r+'">'+[[0,'FORWARD'],[5,'PORT'],[1,'STARBOARD']].map(([v,n])=>'<option value="'+v+'"'+(arc===v?' selected':'')+'>'+n+'</option>').join('')+'</select>');
+  for(const kind of ['laser','particle','missile']){
+   if(kind==='particle'&&ship.particleLost||kind==='missile'&&(ship.missileLost||ship.missiles<1))continue;
+   const count=kind==='laser'?Math.max(0,2-(ship.laserLoss||0)):1;
+   for(let i=0;i<count;i++){
+    const key=kind+(i+1),weaponArc=kind==='laser'?arc:0;
+    if(kind==='missile'){
+     rows.push('<label><input class="blossom-missile" type="checkbox" data-rotation="'+r+'" '+(blossomMissiles[r]?'checked':'')+'> FIRE OPTIONAL PHOTON MISSILE</label>');
+     if(!blossomMissiles[r])continue;
+    }
+    const targets=weaponTargets(aim,'host',kind,i,weaponArc,{arc:weaponArc});
+    if(blossomTargets[r][key]===undefined)blossomTargets[r][key]=targets[0]?.id||'none';
+    const current=blossomTargets[r][key];
+    rows.push('<label>'+kind.toUpperCase()+' '+(i+1)+'</label><select class="blossom-target" data-rotation="'+r+'" data-weapon="'+key+'"><option value="none">HOLD FIRE</option>'+targets.map(t=>'<option value="'+t.id+'"'+(current===t.id?' selected':'')+'>'+(t.id.startsWith('asteroid:')?'ASTEROID '+t.id.slice(9):t.id.toUpperCase())+' · '+t.range+' HEX · TO HIT '+t.toHit+'</option>').join('')+'</select>');
+   }
+  }
+  rows.push('</section>');
+ }
+ return rows.join('');
+}
 function commitFiring(){
  if(!state||state.phase!=='targeting')return;
  const host={...movementOrders.host,fire:chosenWeapons(),targets:targetDraft};
- if($('recharge').dataset.queued==='true'){host.fire='guard';host.targets={}}
+ if(blossomMode){host.fire='blossom';host.blossomArcs=blossomArcs;host.blossomMissiles=blossomMissiles;host.blossomTargets=blossomTargets}
+ else if($('recharge').dataset.queued==='true'){host.fire='guard';host.targets={}}
  const enemyOrder={...movementOrders.guest};
  state=apply(state,{host,guest:enemyOrder},'fire');
- movementOrders=null;targetDraft={};$('recharge').dataset.queued='false';
+ movementOrders=null;targetDraft={};blossomMode=false;$('recharge').dataset.queued='false';
  $('plan').value='';render();
 }
 function fireBlossom(){
  if(scenario!=='swarm'||state?.phase!=='targeting')return;
  const ship=player();
- if(ship.power<4||ship.power>10||ship.blossomRecharge||ship.gunner>=6||ship.unconsciousGunner===1){message('DEATH BLOSSOM REQUIRES 4–10 POWER AND A READY GUNNER');return}
- const missileCount=Math.min(ship.missiles,Number(window.prompt('Optional photon missiles during six rotations (0–4):','0'))||0);
- const count=Math.max(0,missileCount),selection=Array.from({length:6},(_,i)=>i<count);
- const host={...movementOrders.host,fire:'blossom',blossomMissiles:selection};
- state=apply(state,{host,guest:movementOrders.guest},'fire');
- movementOrders=null;targetDraft={};$('plan').value='';render();
+ if(!blossomMode&&(ship.power<4||ship.power>10||ship.blossomRecharge||ship.gunner>=6||ship.unconsciousGunner===1)){
+  message('DEATH BLOSSOM REQUIRES 4–10 POWER AND A READY GUNNER');return;
+ }
+ blossomMode=!blossomMode;targetDraft={};render();
 }
 function render(){
  if(!state)return;
@@ -113,8 +141,8 @@ function render(){
  $('plan').disabled=!ordersPhase;
  for(const id of ['addF','addL','addR','undoPlan','clearPlan'])$(id).disabled=!ordersPhase;
  $('submit').disabled=phase==='finished';$('submit').textContent=ordersPhase?'COMMIT MOVEMENT':phase==='targeting'?'LOCK WEAPON TARGETS':'MISSION COMPLETE';
- $('recharge').disabled=phase!=='targeting'||scenario==='swarm'&&!!ship.blossomRecharge;
- $('blossom').disabled=scenario!=='swarm'||phase!=='targeting'||ship.power<4||ship.power>10||!!ship.blossomRecharge;
+ $('recharge').disabled=phase!=='targeting'||blossomMode||scenario==='swarm'&&!!ship.blossomRecharge;
+ $('blossom').disabled=scenario!=='swarm'||phase!=='targeting'||(!blossomMode&&(ship.power<4||ship.power>10||!!ship.blossomRecharge||ship.gunner>=6||ship.unconsciousGunner===1));
  $('blossom').title='Death Blossom: six clockwise volleys, then mandatory recharge';
  set('allowedMoves',moveLimit(ship)+' / '+(scenario==='swarm'?5:5));set('allowedTurns',turnLimit(ship)+' / 3');
  const restrictions=[ship.stabilizer?'STABILIZER DAMAGED · RANDOM MANOEUVRE':'',ship.restrict?'STEERING · '+ship.restrict:'',ship.half?'HALF SPEED ×'+ship.half:'',ship.constant!=null?'LOCKED SPEED '+ship.constant:'',ship.unconsciousPilot?'PILOT UNCONSCIOUS':'',ship.blossomRecharge?'DEATH BLOSSOM RECHARGE':''].filter(Boolean);
@@ -140,9 +168,18 @@ function render(){
  set('latestEvent',state.log?.[0]||'Mission active');set('log',(state.log||[]).join('\n'));
  $('fleetStatus').hidden=scenario!=='swarm';
  if(scenario==='swarm')$('fleetStatus').innerHTML=Object.entries(state.fleet).map(([id,x])=>'<div class="fleet-ship enemy '+(x.dead?'lost':'')+'">'+id+' · '+(x.dead?'DESTROYED':x.q+','+x.r)+'</div>').join('');
- $('weaponTargetRows').innerHTML=phase==='targeting'?firingTargets():'';
+ $('weaponTargetRows').innerHTML=phase==='targeting'?(blossomMode?blossomRows():firingTargets()):'';
+ $('submit').textContent=blossomMode?'FIRE DEATH BLOSSOM':$('submit').textContent;
+ $('blossom').textContent=blossomMode?'CANCEL DEATH BLOSSOM':'DEATH BLOSSOM';
+ document.querySelectorAll('select.blossom-arc').forEach(el=>el.onchange=()=>{const r=Number(el.dataset.rotation);blossomArcs[r]=Number(el.value);blossomTargets[r]={};render()});
+ document.querySelectorAll('select.blossom-target').forEach(el=>el.onchange=()=>{blossomTargets[Number(el.dataset.rotation)][el.dataset.weapon]=el.value});
+ document.querySelectorAll('input.blossom-missile').forEach(el=>el.onchange=()=>{
+  const r=Number(el.dataset.rotation);blossomMissiles[r]=el.checked;
+  if(blossomMissiles.filter(Boolean).length>Math.min(4,ship.missiles)){blossomMissiles[r]=false;message('NO MORE PHOTON MISSILES AVAILABLE')}
+  render()
+ });
  document.querySelectorAll('select.target-assignment').forEach(el=>el.onchange=()=>{targetDraft[el.dataset.weapon]=el.value});
- $('blossom').disabled=scenario!=='swarm'||phase!=='targeting'||ship.power<4||ship.power>10||!!ship.blossomRecharge;
+ $('blossom').disabled=scenario!=='swarm'||phase!=='targeting'||(!blossomMode&&(ship.power<4||ship.power>10||!!ship.blossomRecharge||ship.gunner>=6||ship.unconsciousGunner===1));
  $('battleResult').hidden=phase!=='finished';
  if(phase==='finished'){set('resultTitle',state.winner==='STAR LEAGUE'?'STAR LEAGUE VICTORY':state.winner==='KO-DAN'?'KO-DAN VICTORY':'BATTLE COMPLETE');set('resultDescription','Turn '+state.turn+' · '+state.winner)}
  $('reset').disabled=false;set('status',phase==='finished'?'BATTLE COMPLETE · START A NEW MISSION':ordersPhase?'PLOT VECTOR AND COMMIT':'SELECT TARGETS AND LOCK FIRE');
