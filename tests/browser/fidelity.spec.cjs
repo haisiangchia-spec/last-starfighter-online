@@ -166,8 +166,14 @@ test('Death Blossom presents six independently selectable rotation volleys and f
  }
  await expect(page.locator('#turn')).toHaveText('02',{timeout:30000});
  const after=await page.evaluate(()=>window.__battleTest.state());
- expect(after.ships.find(s=>s.id==='GS-01').power).toBe(0);
+ const gunstar=after.ships.find(s=>s.id==='GS-01');
+ expect(gunstar.power).toBe(0);
+ expect(gunstar.missiles).toBe(4); // Optional missiles default to HOLD.
  const blossoming=after.history.filter(line=>line.includes('DEATH BLOSSOM ROTATION'));
  expect(blossoming).toHaveLength(6);
+ await expect(page.locator('#status')).toContainText('MANDATORY DEATH BLOSSOM RECHARGE');
+ await expect(page.locator('#laser')).toBeDisabled();
+ await expect(page.locator('#particle')).toBeDisabled();
+ await expect(page.locator('#missile')).toBeDisabled();
  expect(errors).toEqual([]);
 });
