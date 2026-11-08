@@ -594,6 +594,11 @@ function renderPhaseGuide(){
  $('phaseLabel').textContent=movement?'MOVEMENT · PLOT VECTOR':phase==='targeting'?'TARGETING · ASSIGN WEAPONS':phase==='finished'?'BATTLE COMPLETE':'RESOLVING · STANDBY';
  $('phaseHelp').textContent=movement?'Damage-adjusted limits and steering restrictions appear below.':phase==='targeting'?'Select the target for each weapon, then lock your assignments.':'Orders are locked; the battle result is shown on the starfield.';
  $('latestEvent').textContent=(state.log||[])[0]||'Awaiting combat transmissions.';
+ const self=isSwarm(state)&&role==='guest'?(state.fleet?.[selectedSwarm]||state.ships.guest):state.ships[role];
+ const shipId=isSwarm(state)&&role==='guest'?(selectedSwarm||'SWARM FIGHTER'):role==='host'?'GS-01':role==='host2'?'GS-02':role==='guest'?'DF-01':'DF-02';
+ $('quickTurn').textContent='TURN '+state.turn+' · '+(movement?'MOVEMENT':phase==='targeting'?'TARGETING':phase.toUpperCase());
+ $('quickShip').textContent=shipId+' · '+(pilotNames[role]||'PILOT');
+ $('quickResources').textContent='POWER '+(self.power??0)+'/20 · HULL '+(self.hp??0)+'/20 · MISSILES '+(self.missiles??0);
  updateMovementGuidance();
 }
 function renderTargetChoices(){
