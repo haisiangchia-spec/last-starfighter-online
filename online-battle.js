@@ -9,7 +9,7 @@ let rechargeQueued=false;let lastOrderError='';let uid,role,state,unsubscribe,lo
 const dirs=[[1,0],[0,1],[-1,1],[-1,0],[0,-1],[1,-1]];
 const moves=['hold','F','L','R'];const NQ=19,NR=13;
 function parsePlan(plan){if(typeof plan!=='string'||!/^[FLR]{0,5}$/.test(plan))throw Error('Movement must contain 0–5 F/L/R steps.');if([...plan].filter(x=>x!=='F').length>3)throw Error('Maximum three turns per round.');return [...plan]}
-function moveLimit(s){let n=Math.max(0,5-Math.max(Math.floor((s.engine||0)/2),Math.floor((s.hull||0)/4)));if((s.half||0)>=3)n=0;else if(s.half===2)n=n>=3?1:0;else if(s.half===1)n=Math.ceil(n/2);if(s.constant!==null&&s.constant!==undefined)n=Math.min(n,s.constant);return n}
+function moveLimit(s){let n=Math.max(0,(s.type==='swarm'?3:5)-Math.max(Math.floor((s.engine||0)/2),Math.floor((s.hull||0)/4)));if((s.half||0)>=3)n=0;else if(s.half===2)n=n>=3?1:0;else if(s.half===1)n=Math.ceil(n/2);if(s.constant!==null&&s.constant!==undefined)n=Math.min(n,s.constant);return n}
 function turnLimit(s){return Math.max(0,3-Math.max(Math.floor((s.engine||0)/4),Math.floor((s.hull||0)/8)))}
 function predict(ship,plan){const s={...ship};const steps=parsePlan(plan);if(steps.length>moveLimit(s))throw Error('Engine damage limits movement to '+moveLimit(s)+' steps.');if(!s.stabilizer&&steps.filter(x=>x!=='F').length>turnLimit(s))throw Error('System damage limits turns to '+turnLimit(s)+'.');if((s.pilot||0)>=6&&steps.length)throw Error('Pilot killed; movement is uncontrolled.');if(s.unconsciousPilot===1&&steps.length)throw Error('Pilot unconscious.');if(s.restrict==='noL'&&steps.includes('L')||s.restrict==='noR'&&steps.includes('R'))throw Error('Steering restriction prevents this turn.');if(s.restrict?.startsWith('lock')&&steps.some(x=>x!==({lockL:'L',lockR:'R',lockF:'F'}[s.restrict])))throw Error('Steering locked to '+s.restrict+'.');if(s.constant!==null&&s.constant!==undefined&&steps.length!==Math.min(s.constant,moveLimit(s)))throw Error('Constant-speed damage requires '+Math.min(s.constant,moveLimit(s))+' steps.');for(const cmd of steps){const [dq,dr]=dirs[s.d];s.q+=dq;s.r+=dr;if(cmd==='L')s.d=(s.d+5)%6;if(cmd==='R')s.d=(s.d+1)%6;if(s.q<0||s.q>=NQ||s.r<0||s.r>=NR)break}return s}
 const facingNames=['E','SE','SW','W','NW','NE'];
@@ -82,7 +82,7 @@ const initial=(asteroids=false,seed=1984)=>({scenario:'duel',seed,asteroids:aste
 // Ko-Dan contacts under guest control. Each contact has its own sealed vector.
 const isSwarm=s=>s?.scenario==='swarm';
 const swarmIds=()=>Array.from({length:14},(_,i)=>'SW-'+String(i+1).padStart(2,'0'));
-const newSwarmShip=(i)=>({q:10+Math.floor(i/7)*2,r:3+(i%7),d:0,hp:20,power:20,missiles:0,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:true,missileLost:true,dead:false});
+const newSwarmShip=(i)=>({type:'swarm',q:10+Math.floor(i/7)*2,r:3+(i%7),d:0,hp:20,power:20,missiles:0,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:true,missileLost:true,dead:false});
 function initialSwarm(asteroids=false,seed=1984){
  const s=initial(asteroids,seed);s.scenario='swarm';s.ships.host={...s.ships.host,q:5,r:6,d:0};
  s.ships.guest=newSwarmShip(0);s.fleet=Object.fromEntries(swarmIds().map((id,i)=>[id,newSwarmShip(i)]));
