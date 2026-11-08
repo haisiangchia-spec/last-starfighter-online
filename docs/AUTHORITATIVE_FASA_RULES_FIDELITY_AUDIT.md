@@ -39,3 +39,14 @@
 6. Reconcile all prior secondary-rule claims against this PDF; this upload takes precedence.
 
 **Audit caveat:** Do not treat “84 combat tests passed” as 84 fully independent rules validations. Tests can reflect assumptions already encoded in the implementation and do not replace comparison against the primary PDF.
+
+## Implementation update — 2026-11-08: asteroid clearing and damage-driven steering
+
+The above table records the **baseline at audit time**. The following work was subsequently committed:
+
+- `online-battle.js`: The vector parser accepts any 0–5 F/L/R sequence and leaves the three-turn ceiling to `predict()`, which understands steering-lock, stabilizer, and constant-speed exceptions. Undamaged ships still cannot plan four turns. **Implemented; source-level tested.**
+- `online-battle.js`: Photon missile targeting now offers legal `asteroid:q,r` target IDs (no enemy required in that hex), includes the FASA p.19 +1 asteroid penalty, resolves missile shots against the selected hex in **1v1 and 2v2**, expends missiles on both hit and miss, and clears the targeted hex only on a hit. The pre-existing `missileBlast()` applies damage solely to occupants of the target hex. **Implemented; source-level tested.**
+- `game.html`: Local target dropdowns also offer empty asteroid hexes for photon missiles; hit/clear uses the local missile dice, deferred duel damage and destruction sequencing. **Implemented; syntax checked, browser E2E not yet verified.**
+- `tests/combat.test.cjs`: Added four tests for forced steering, asteroid target availability and hit number, 1v1/2v2 clearing, and blast confinement. **88/88 source-level checks passed** at commit `58c3cbc` (not a verified GitHub Actions result).
+
+**Remaining:** Browser/emulator verification; rock-click target selection (dropdown is present); Swarm-mode explicit asteroid selection; simultaneous multiple missile effects in the same cluster; original seven-hex asteroid-counter geometry and asteroid-on Swarm setup; online Death Blossom. The above P0 rows should not be interpreted as fully closed for all modes.
