@@ -366,15 +366,23 @@ test('online asteroid generation uses seeded 2-large plus 10-20-small layout',()
  assert.ok(small>=10&&small<=20);
  assert.equal(a.asteroids.length,14+small);
  assert.deepEqual(a.asteroids,layout.hexes);
- assert.deepEqual(b.asteroids,layout.hexes);
+ assert.deepEqual(b.asteroids,c.generateAsteroidField(1984,Object.values(b.ships)).hexes);
 });
-test('1v1 and 2v2 generate matching, Firestore-safe asteroid layouts for a chosen seed',()=>{
+test('1v1 and 2v2 generate individually safe, Firestore-serializable seeded asteroid layouts',()=>{
  for(const seed of [1,42,1984,2026,4294967295]){
   const a=c.initial(true,seed),b=c.initialDoubles(true,seed);
   assert.equal(a.seed,seed);assert.equal(b.seed,seed);
-  assert.deepEqual(a.asteroids,b.asteroids);
-  assert.ok(a.asteroids.every(x=>typeof x==='string'));
-  assert.ok(a.asteroids.length>=24&&a.asteroids.length<=34);
+  assert.deepEqual(a.asteroids,c.initial(true,seed).asteroids);
+  assert.deepEqual(b.asteroids,c.initialDoubles(true,seed).asteroids);
+  for(const battle of [a,b]){
+   assert.ok(battle.asteroids.every(x=>typeof x==='string'));
+   assert.ok(battle.asteroids.length>=24&&battle.asteroids.length<=34);
+   for(const rock of battle.asteroids){
+    const [q,r]=rock.split(',').map(Number);
+    for(const ship of Object.values(battle.ships))
+     assert.ok(Math.max(Math.abs(q-ship.q),Math.abs(r-ship.r),Math.abs(q+r-ship.q-ship.r))>1,'Ship clearance violated');
+   }
+  }
  }
  assert.notDeepEqual(c.initial(true,42).asteroids,c.initial(true,1984).asteroids);
 });
@@ -1057,7 +1065,7 @@ test('House rule: seeded asteroid maps use the same counts in online Duel, 2v2 a
  for(const seed of [1,1984,2026,98374]){
   const duel=c.initial(true,seed),doubles=c.initialDoubles(true,seed),swarm=c.initialSwarm(true,seed);
   for(const battle of [duel,doubles,swarm]){
-   const layout=c.generateAsteroidField(seed,battle.scenario==='swarm'?[battle.ships.host,...Object.values(battle.fleet)]:[{q:2,r:6},{q:16,r:6}]);
+   const layout=c.generateAsteroidField(seed,battle.scenario==='swarm'?[battle.ships.host,...Object.values(battle.fleet)]:battle.scenario==='doubles'?Object.values(battle.ships):[{q:2,r:6},{q:16,r:6}]);
    assert.ok(layout.counters.filter(x=>x.type==='small').length>=10);
    assert.ok(layout.counters.filter(x=>x.type==='small').length<=20);
    assert.equal(c.rocksFor(battle).size,layout.hexes.length);
