@@ -624,6 +624,7 @@ function applySwarm(s,orders,stage='full'){
  // activate Death Blossom. Six clockwise firing steps start one side
  // clockwise from its original facing and end at the original facing.
  const blossomRequested=host.fire==='blossom';
+ const recoveringFromBlossom=!!gun.blossomRecharge;
  const blossomEligible=!gun.dead&&gun.gunner<6&&gun.unconsciousGunner!==1&&gun.power>=4&&gun.power<=10&&!gun.blossomRecharge;
  if(gun.blossomRecharge){
   // Mandatory recovery turn: no movement, weapon fire or alternate orders.
@@ -673,7 +674,7 @@ function applySwarm(s,orders,stage='full'){
   events.push('GS-01 DEATH BLOSSOM UNAVAILABLE · REQUIRES 4–10 POWER AND OPERATIONAL GUNNER');
  }
  const selected=(host.fire||'none').split('+').filter(k=>['laser','particle','missile'].includes(k));
- if(gun.blossomRecharge||blossomRequested){/* Death Blossom or recovery already handled above. */}
+ if(recoveringFromBlossom||blossomRequested){/* Death Blossom or recovery already handled above. */}
  else if(host.fire==='guard'&&!(host.plan||'').length){gun.power=Math.min(20,gun.power+5);events.push('GS-01 RECHARGES +5 POWER')}
  else if(!gun.dead&&gun.power>0&&gun.gunner<6&&gun.unconsciousGunner!==1){
   if(selected.length||host.plan){gun.power=Math.max(0,gun.power-1)}
