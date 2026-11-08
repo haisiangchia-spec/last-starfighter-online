@@ -371,3 +371,46 @@ for(const size of [1,2])test('release gate: real '+size+'v'+size+' completes fro
   for(const pilot of pilots)expect(pilot.errors).toEqual([]);
  }finally{await Promise.all(pilots.map(p=>p.context.close()))}
 });
+
+test('lobby routes local AI through multiplayer tactical interface and excludes pass-and-play',async({page})=>{
+ await page.goto('/index.html');
+ const localLinks=page.locator('a[href^="./local-battle.html"]');
+ await expect(localLinks).toHaveCount(2);
+ await expect(page.locator('a[href*="mode=hotseat"]')).toHaveCount(0);
+ await expect(page.locator('a[href*="game.html?scenario"]')).toHaveCount(0);
+});
+for(const localScenario of ['duel','swarm'])test('shared multiplayer battle UI works for local '+localScenario+' AI',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/local-battle.html?scenario='+localScenario);
+ await expect(page.locator('#identity')).toContainText('LOCAL AI');
+ await expect(page.locator('#localScenario')).toHaveValue(localScenario);
+ await expect(page.locator('#battleQuickStatus')).toBeVisible();
+ await expect(page.locator('#map')).toBeVisible();
+ await expect(page.locator('#movementControls')).toBeVisible();
+ await expect(page.locator('#targetingPanel')).toBeHidden();
+ await expect(page.locator('#submit')).toHaveText('COMMIT MOVEMENT');
+ const initial=await page.evaluate(()=>window.__localBattleTest.state());
+ expect(initial.turn).toBe(1);
+ expect(localScenario==='swarm'?Object.keys(initial.fleet).length:Object.keys(initial.ships).length).toBe(localScenario==='swarm'?14:2);
+ await page.locator('#submit').click();
+ await expect(page.locator('#targetingPanel')).toBeVisible();
+ await expect(page.locator('#submit')).toHaveText('LOCK WEAPON TARGETS');
+ await page.locator('#submit').click();
+ await expect(page.locator('#turn')).toHaveText('2');
+ await expect(page.locator('#movementControls')).toBeVisible();
+ await expect(page.locator('#targetingPanel')).toBeHidden();
+ expect(errors).toEqual([]);
+});
+test('local shared tactical screen can restart with randomized clustered asteroids',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/local-battle.html?scenario=swarm&asteroids=off');
+ await page.locator('#localAsteroids').selectOption('on');
+ await page.locator('#localSeed').fill('2026');
+ await page.locator('#newLocalMission').click();
+ await expect(page.locator('#asteroidSync')).toContainText('ASTEROID FIELD ACTIVE');
+ const battle=await page.evaluate(()=>window.__localBattleTest.state());
+ expect(battle.asteroids.length).toBeGreaterThanOrEqual(24);
+ expect(battle.asteroids.length).toBeLessThanOrEqual(34);
+ expect(new Set(battle.asteroids).size).toBe(battle.asteroids.length);
+ expect(errors).toEqual([]);
+});
