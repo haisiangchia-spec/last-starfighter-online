@@ -305,7 +305,7 @@ function applyDoubles(s,orders,stage='full'){
  // Snapshot post-movement positions. Damage from all attacks is deferred until every fighter fires.
  for(const slot of battleSlots){
   const ship=out.ships[slot],o=orders[slot],label=slot.toUpperCase();
-  if(ship.dead||ship.pilot>=6||ship.unconsciousPilot===1||ship.unconsciousGunner===1||(teamSide(slot)==='host'&&ship.gunner>=6))continue;
+  if(ship.dead||(teamSide(slot)==='host'?(ship.gunner>=6||ship.unconsciousGunner===1):(ship.pilot>=6||ship.unconsciousPilot===1)))continue;
   if(o.fire==='guard'){if(!(o.plan||'').length){ship.power=Math.min(20,(ship.power??20)+5);events.push(label+' RECHARGES +5 POWER')}continue}
   const enemies=battleSlots.filter(x=>teamSide(x)!==teamSide(slot)&&!out.ships[x].dead);
   const targetSlot=enemies.includes(o.target)?o.target:enemies[0];
@@ -316,7 +316,7 @@ function applyDoubles(s,orders,stage='full'){
   ship.power--;
   const cap=Math.max(1,3-Math.max(Math.floor((ship.engine||0)/4),Math.floor((ship.hull||0)/8)));
   let index=0;
-  for(const kind of kinds.slice(0,cap)){
+  for(const kind of usableWeaponKinds(ship,slot,kinds).slice(0,cap)){
    if(kind==='particle'&&ship.particleLost||kind==='missile'&&ship.missileLost)continue;
    if(kind==='missile'&&ship.missiles<=0)continue;
    const count=kind==='laser'?Math.max(0,(teamSide(slot)==='host'?2:3)-(ship.laserLoss||0)):1;
@@ -394,8 +394,9 @@ function apply(s,orders,stage='full'){
   const kinds=selection.split('+').filter(k=>weaponData[k]);
   if(!kinds.length){if((o.plan||'').length&&ship.power>0){ship.power--;events.push(label+' MOVEMENT COSTS 1 POWER')}else events.push(label+' HOLDS POSITION / FIRE');continue}
   const cap=Math.max(1,3-Math.max(Math.floor((ship.engine||0)/4),Math.floor((ship.hull||0)/8)));
-  const enabled=kinds.slice(0,cap);
-  if(kinds.length>cap)events.push(label+' SYSTEM DAMAGE: ONLY '+cap+' WEAPON GROUPS POWERED');
+  const available=usableWeaponKinds(ship,side,kinds);
+  const enabled=available.slice(0,cap);
+  if(available.length>cap)events.push(label+' SYSTEM DAMAGE: ONLY '+cap+' WEAPON GROUPS POWERED');
   if((ship.power??20)<1){events.push(label+' INSUFFICIENT POWER · WEAPONS CANNOT FIRE');continue}
   // Local game charges one point for an active turn, not one point per weapon.
   ship.power=Math.max(0,ship.power-1);
@@ -655,6 +656,26 @@ function renderPhaseGuide(){
  $('quickResources').textContent='POWER '+(self.power??0)+'/20 · HULL '+(self.hp??0)+'/20 · MISSILES '+(self.missiles??0);
  updateMovementGuidance();
 }
+// Match the local game's separate pilot/gunner firing responsibilities.
+function fireControlCrewReason(ship,slot){
+ if(ship.dead)return 'SHIP DESTROYED';
+ if(teamSide(slot)==='host'){
+  if((ship.gunner||0)>=6)return 'GUNNER KILLED · NO FIRING';
+  if(ship.unconsciousGunner===1)return 'GUNNER UNCONSCIOUS · NO FIRING';
+ }else{
+  if((ship.pilot||0)>=6)return 'PILOT KILLED · NO FIRING';
+  if(ship.unconsciousPilot===1)return 'PILOT UNCONSCIOUS · NO FIRING';
+ }
+ if((ship.power??20)<=0)return 'NO POWER · WEAPONS DISABLED';
+ return null;
+}
+function usableWeaponKinds(ship,slot,kinds){
+ return kinds.filter(kind=>
+  (kind!=='laser'||(teamSide(slot)==='host'?2:3)>(ship.laserLoss||0))&&
+  (kind!=='particle'||!ship.particleLost)&&
+  (kind!=='missile'||(!ship.missileLost&&(ship.missiles??0)>0))
+ );
+}
 function renderTargetChoices(){
  const stage=state?.phase==='targeting';
  $('targetingPanel').hidden=!stage;
@@ -679,10 +700,13 @@ function renderTargetChoices(){
  const laserCount=Math.max(0,(gun?2:3)-(ship.laserLoss||0));
  const groups=[...Array.from({length:laserCount},(_,i)=>['laser',i]),['particle',0],['missile',0]];
  const cap=Math.max(1,3-Math.max(Math.floor((ship.engine||0)/4),Math.floor((ship.hull||0)/8)));
- let selected=['laser','particle','missile'].filter(x=>$(x).checked).slice(0,cap);
+ const requested=['laser','particle','missile'].filter(x=>$(x).checked);
+ const selected=usableWeaponKinds(ship,role,requested).slice(0,cap);
+ const crewReason=fireControlCrewReason(ship,role);
  const rows=[];
+ if(crewReason)rows.push('<small class="critical-fire-warning">'+crewReason+' · TARGETS UNAVAILABLE</small>');
  for(const [kind,i] of groups){
-  if(swarmGuest)continue;
+  if(swarmGuest||crewReason)continue;
   if(!selected.includes(kind))continue;
   if((kind==='particle'&&ship.particleLost)||(kind==='missile'&&(ship.missileLost||ship.missiles<=0)))continue;
   const id=weaponId(kind,i),legal=weaponTargets(state,role,kind,i,arc,movement);
