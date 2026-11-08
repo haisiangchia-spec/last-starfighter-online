@@ -166,7 +166,8 @@ function confirmBlossomTargets(){
 }
 async function awaitBlossomTargets(s,rotation){
  phase='blossom-targeting';playing=false;humanSide='star';selected=s;inspected=null;
- s.fire={laser:true,particle:true,missile:s.missiles>0};
+ // Missiles are optional in the printed rule: never automatically expend limited ammunition.
+ s.fire={laser:true,particle:true,missile:false};
  s.targetAssignments={};
  prepareDefaultTargets(s);
  log('DEATH BLOSSOM '+rotation+'/6 · SELECT TARGET FOR EACH WEAPON · MISSILE OPTIONAL');
