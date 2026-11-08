@@ -5,6 +5,20 @@ import { firebaseConfig } from './firebase-config.js';
 const $=id=>document.getElementById(id);
 let auth,db,uid=null,room=null,role=null,unsubscribe=null,current=null;
 const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function randomSeed(){const seed=new Uint32Array(1);crypto.getRandomValues(seed);return seed[0]||1}
+function coinFlip(){const b=new Uint32Array(1);crypto.getRandomValues(b);return (b[0]&1)===0}
+function pilotName(){const value=$('pilotName').value.trim().replace(/\s+/g,' ');if(!value||value.length>24)throw Error('Enter your pilot name (1–24 characters) before creating or joining a room.');return value}
+const slotName=(r,slot)=>r[slot+'Name']||'UNNAMED PILOT';
+const isRoomOwner=r=>!!r&&(r.ownerUid===uid||(!r.ownerUid&&r.hostUid===uid));
+function availableSlot(r){
+ const h=team(r,'host').length,g=team(r,'guest').length;
+ const preferred=h<g?'host':g<h?'guest':coinFlip()?'host':'guest';
+ for(const faction of [preferred,preferred==='host'?'guest':'host']){
+  const open=(faction==='host'?['host','host2']:['guest','guest2']).find(slot=>!slotUid(r,slot));
+  if(open)return open;
+ }
+ return null;
+}
 function randomCode(){const b=new Uint8Array(8);crypto.getRandomValues(b);return Array.from(b,n=>alphabet[n%alphabet.length]).join('')}
 function notice(msg){$('notice').textContent=msg}
 function error(e){console.error(e);notice('ERROR: '+(e?.message||String(e)))}
@@ -18,15 +32,15 @@ const balanced=r=>launchBlockers(r).length===0;
 function show(r){
  current=r;
  const host=team(r,'host'),guest=team(r,'guest'),equal=host.length===guest.length&&host.length>0,blockers=launchBlockers(r),ready=blockers.length===0;
- $('scenarioSettings').hidden=role!=='host';
- $('scenarioChoice').value=r.scenario||'duel';$('lobbyAsteroids').checked=!!r.asteroids;$('battleSeed').value=String(currentSeed(r));drawAsteroidPreview(!!r.asteroids,currentSeed(r));
+ $('scenarioSettings').hidden=!isRoomOwner(r);
+ $('scenarioChoice').value=r.scenario||'duel';$('lobbyAsteroids').checked=!!r.asteroids;$('battleSeed').value=String(currentSeed(r));
  $('seedStatus').textContent=String(currentSeed(r));
  $('scenarioStatus').textContent=('GUNSTAR DUEL')+(r.asteroids?' · ASTEROIDS':' · CLEAR SPACE');
  $('launch').disabled=!ready;$('launch').textContent=ready?'LAUNCH ONLINE BATTLE · READY':'LAUNCH LOCKED · '+(equal?'WAITING FOR READY':'UNEVEN TEAMS');$('launch').title=ready?'All pilots ready to launch':blockers.join(' · ');$('launchHint').textContent=ready?'✓ ALL PILOTS READY · 1v1 OR 2v2 MISSION CAN START':'LAUNCH REQUIREMENTS: '+blockers.join(' · ');$('launchHint').className=ready?'ok':'wait';
  $('roomPanel').hidden=false;$('roomCode').textContent=room;
- $('side').textContent=sideOf(role)+' · '+(role.endsWith('2')?'PILOT 2':'PILOT 1');
- $('hostState').textContent=host.map(slot=>(slot==='host'?'P1':'P2')+': '+(slotReady(r,slot)?'READY':'WAITING')).join(' · ')||'AWAITING PILOT';
- $('guestState').textContent=guest.map(slot=>(slot==='guest'?'P1':'P2')+': '+(slotReady(r,slot)?'READY':'WAITING')).join(' · ')||'AWAITING PILOT';
+ $('side').textContent=slotName(r,role)+' · '+sideOf(role)+' · '+(role.endsWith('2')?'PILOT 2':'PILOT 1')+(isRoomOwner(r)?' · ROOM CREATOR':'');
+ $('hostState').textContent=host.map(slot=>(slot==='host'?'P1':'P2')+' '+slotName(r,slot)+': '+(slotReady(r,slot)?'READY':'WAITING')).join(' · ')||'AWAITING PILOT';
+ $('guestState').textContent=guest.map(slot=>(slot==='guest'?'P1':'P2')+' '+slotName(r,slot)+': '+(slotReady(r,slot)?'READY':'WAITING')).join(' · ')||'AWAITING PILOT';
  $('balanceState').textContent=host.length+' vs '+guest.length+(equal?' · BALANCED':' · UNEVEN — LAUNCH BLOCKED');
  $('balanceState').className=equal?'ok':'wait';
  $('sessionState').textContent=ready?'ALL PILOTS READY · LAUNCH ENABLED':blockers.join(' · ');
@@ -38,67 +52,57 @@ function subscribe(code){unsubscribe?.();room=code;unsubscribe=onSnapshot(doc(db
  if(!role){notice('You are not a member of this room.');return}
  show(data);notice('Connected to room '+room+'. Lobby updates are live.');
 },error)}
-async function createRoom(){if(!uid)return;try{
- $('create').disabled=true;let code;for(let i=0;i<5;i++){code=randomCode();if(!(await getDoc(doc(db,'rooms',code))).exists())break;}
- await setDoc(doc(db,'rooms',code),{hostUid:uid,guestUid:null,host2Uid:null,guest2Uid:null,hostReady:false,guestReady:false,host2Ready:false,guest2Ready:false,createdAt:serverTimestamp(),scenario:'duel',asteroids:false,seed:1984});
- subscribe(code);history.replaceState(null,'','#room='+code);
-}catch(e){error(e)}finally{$('create').disabled=false}}
+async function createRoom(){if(!uid)return;
+ let name;try{name=pilotName()}catch(e){notice(e.message);return}
+ try{
+  $('create').disabled=true;
+  let code;for(let i=0;i<8;i++){code=randomCode();if(!(await getDoc(doc(db,'rooms',code))).exists())break}
+  const firstSide=coinFlip()?'host':'guest';
+  const data={ownerUid:uid,hostUid:firstSide==='host'?uid:null,guestUid:firstSide==='guest'?uid:null,host2Uid:null,guest2Uid:null,hostName:firstSide==='host'?name:null,guestName:firstSide==='guest'?name:null,host2Name:null,guest2Name:null,hostReady:false,guestReady:false,host2Ready:false,guest2Ready:false,createdAt:serverTimestamp(),scenario:'duel',asteroids:true,seed:randomSeed()};
+  await setDoc(doc(db,'rooms',code),data);
+  localStorage.setItem('starfighterPilotName',name);
+  subscribe(code);history.replaceState(null,'','#room='+code);
+ }catch(e){error(e)}finally{$('create').disabled=false}
+}
 async function joinRoom(code){if(!uid)return;code=code.toUpperCase().trim();
  if(!/^[A-HJ-NP-Z2-9]{8}$/.test(code)){notice('Enter a valid 8-character room code.');return}
  try{
- const ref=doc(db,'rooms',code),snap=await getDoc(ref);
- if(!snap.exists()){notice('Room not found.');return}
- const r=snap.data();
- if(slots.some(slot=>slotUid(r,slot)===uid)){subscribe(code);history.replaceState(null,'','#room='+code);return}
- const faction=$('joinFaction').value;
- const slot=await runTransaction(db,async tx=>{
-  const current=await tx.get(ref);if(!current.exists())throw Error('Room not found');
-  const data=current.data();
-  if(slots.some(x=>slotUid(data,x)===uid))return slots.find(x=>slotUid(data,x)===uid);
-  const available=(faction==='host'?['host','host2']:['guest','guest2']).find(x=>!slotUid(data,x));
-  if(!available)throw Error('This faction already has two pilots.');
-  const field=available==='host'?'hostUid':available==='guest'?'guestUid':available+'Uid';
-  tx.update(ref,{[field]:uid});
-  return available;
- });
- subscribe(code);history.replaceState(null,'','#room='+code);
+  const ref=doc(db,'rooms',code),snap=await getDoc(ref);
+  if(!snap.exists()){notice('Room not found.');return}
+  const r=snap.data();
+  if(slots.some(slot=>slotUid(r,slot)===uid)){subscribe(code);history.replaceState(null,'','#room='+code);return}
+  let name;try{name=pilotName()}catch(e){notice(e.message);return}
+  await runTransaction(db,async tx=>{
+   const current=await tx.get(ref);if(!current.exists())throw Error('Room not found');
+   const data=current.data();
+   if(slots.some(x=>slotUid(data,x)===uid))return;
+   const available=availableSlot(data);
+   if(!available)throw Error('Room is full (four pilots).');
+   const field=available==='host'?'hostUid':available==='guest'?'guestUid':available+'Uid';
+   tx.update(ref,{[field]:uid,[available+'Name']:name});
+  });
+  localStorage.setItem('starfighterPilotName',name);
+  subscribe(code);history.replaceState(null,'','#room='+code);
  }catch(e){error(e)}
 }
-// Same seeded LCG and 22-placement algorithm as game.html and online-battle.js.
-function asteroidPositionsForSeed(seed=1984){
- let rng=(Number(seed)>>>0)||1;
- const random=()=>{rng=(Math.imul(1664525,rng)+1013904223)>>>0;return rng/4294967296};
- const rocks=new Set();
- for(let i=0;i<22;i++){const q=5+Math.floor(random()*9),r=Math.floor(random()*13);rocks.add(q+','+r)}
- return [...rocks].map(p=>p.split(',').map(Number));
-}
 const currentSeed=r=>Number.isInteger(r?.seed)&&r.seed>=1&&r.seed<=4294967295?r.seed:1984;
-const asteroidPositions=seed=>asteroidPositionsForSeed(seed);
-function drawAsteroidPreview(enabled,seed=1984){
- const canvas=$('asteroidPreview');if(!canvas)return;
- const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
- ctx.clearRect(0,0,w,h);ctx.fillStyle='#081a25';ctx.fillRect(0,0,w,h);
- const scale=Math.min((w-40)/24,(h-28)/16),point=(q,r)=>[22+scale*(q+r/2),16+scale*.87*r];
- for(let q=0;q<19;q++)for(let r=0;r<13;r++){const [x,y]=point(q,r);ctx.beginPath();ctx.arc(x,y,1.1,0,Math.PI*2);ctx.fillStyle='#265263';ctx.fill()}
- if(enabled)for(const [q,r] of asteroidPositions(seed)){const [x,y]=point(q,r);ctx.beginPath();for(let i=0;i<7;i++){const a=i*Math.PI*2/7,rad=i%2?6:8;i?ctx.lineTo(x+rad*Math.cos(a),y+rad*Math.sin(a)):ctx.moveTo(x+rad*Math.cos(a),y+rad*Math.sin(a))}ctx.closePath();ctx.fillStyle='#9d6a35';ctx.fill();ctx.strokeStyle='#ffc65b';ctx.lineWidth=1.4;ctx.stroke()}
- ctx.font='12px monospace';ctx.fillStyle=enabled?'#ffc65b':'#9ab1bc';ctx.fillText(enabled?asteroidPositions(seed).length+' ASTEROIDS':'CLEAR SPACE · NO ASTEROIDS',12,h-10);
-}
 async function saveScenario(){
- if(role!=='host'||!room||!current)return;
+ if(!isRoomOwner(current)||!room||!current)return;
  const button=$('saveScenario');button.disabled=true;
  try{
   const asteroid=$('lobbyAsteroids').checked,scenario='duel',seed=Number($('battleSeed').value);
   if(!Number.isSafeInteger(seed)||seed<1||seed>4294967295)throw Error('Seed must be a whole number between 1 and 4294967295.');
   await updateDoc(doc(db,'rooms',room),{scenario,asteroids:asteroid,seed,hostReady:false,guestReady:false,host2Ready:false,guest2Ready:false});
-  notice('SAVED: '+(asteroid?'ASTEROID FIELD ENABLED ('+asteroidPositions(seed).length+' ROCKS)':'CLEAR SPACE')+' · SEED '+seed+'. All pilots must ready up again.');
- }catch(e){error(e);$('lobbyAsteroids').checked=!!current.asteroids;$('battleSeed').value=String(currentSeed(current));drawAsteroidPreview(!!current.asteroids,currentSeed(current))}
+  notice('SAVED: '+(asteroid?'ASTEROID FIELD ENABLED':'CLEAR SPACE')+' · SEED '+seed+'. All pilots must ready up again.');
+ }catch(e){error(e);$('lobbyAsteroids').checked=!!current.asteroids;$('battleSeed').value=String(currentSeed(current))}
  finally{button.disabled=false}
 }
 $('saveScenario').onclick=saveScenario;
-$('lobbyAsteroids').addEventListener('change',()=>{drawAsteroidPreview($('lobbyAsteroids').checked,Number($('battleSeed').value)||1984);saveScenario()});
+$('lobbyAsteroids').addEventListener('change',saveScenario);
 $('scenarioChoice').addEventListener('change',saveScenario);
 $('battleSeed').addEventListener('change',saveScenario);
-$('randomSeed').addEventListener('click',()=>{const n=new Uint32Array(1);crypto.getRandomValues(n);$('battleSeed').value=String(n[0]||1);drawAsteroidPreview($('lobbyAsteroids').checked,Number($('battleSeed').value));saveScenario()});
+$('randomSeed').addEventListener('click',()=>{$('battleSeed').value=String(randomSeed());saveScenario()});
+$('pilotName').value=localStorage.getItem('starfighterPilotName')||'';
 $('create').onclick=createRoom;$('join').onclick=()=>joinRoom($('codeInput').value);
 $('launch').onclick=()=>{if(!current||!balanced(current)){notice('Launch blocked: '+(current?launchBlockers(current).join(' · '):'ROOM NOT LOADED'));return}location.href='./online-battle.html#room='+room};
 $('ready').onclick=async()=>{if(!room||!role||!current)return;try{
