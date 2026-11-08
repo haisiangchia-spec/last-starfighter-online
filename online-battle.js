@@ -736,20 +736,15 @@ function applySwarm(s,orders,stage='full'){
   }
   for(let i=0;i<kinds.length&&!ship.dead;i++)damageShip(ship,kinds[i],s.turn*97+i*37,side,events);
  }
+ // Every mode now uses the same FASA end-of-turn crew, life-support,
+ // steering and deferred-speed transitions. Surviving Swarm craft
+ // rarely carry damage because one successful weapon hit destroys them.
  for(const [id,ship] of [['GS-01',gun],...Object.entries(out.fleet)]){
-  if(ship.dead)continue;
-  recoverCrewOnline(ship,'pilot',s.turn,id==='GS-01'?'host':'guest',events);
-  recoverCrewOnline(ship,'gunner',s.turn,id==='GS-01'?'host':'guest',events);
-  if(ship.life){ship.life--;if(ship.life<=0){ship.dead=true;ship.hp=0;events.push(id+' LIFE SUPPORT FAILURE')}}
-  if(ship.nextStabilizer){ship.stabilizer=1;ship.nextStabilizer=0;ship.restrict=null;ship.nextRestrict=0}
-  else{ship.stabilizer=0;if(ship.nextRestrict){const options=['lockL','lockF','lockR','noL','noR'];ship.restrict=options[(roll(s.turn*333+(id==='GS-01'?11:Number(id.slice(3))*37))-1)%5];ship.nextRestrict=0}else ship.restrict=null}
-  if(ship.nextConstant&&ship.nextHalf){ship.deferredConstant=true;ship.deferredSpeedTarget=ship.lastMove??0;ship.deferredSpeedTurns=2;ship.constant=null;ship.nextConstant=0}
-  else if(ship.nextConstant){ship.constant=ship.lastMove??0;ship.nextConstant=0}else ship.constant=null;
-  if(ship.deferredSpeedTurns>0){ship.half=Math.max(1,ship.nextHalf||0);ship.deferredSpeedTurns--;ship.nextHalf=0}
-  else{ship.half=ship.nextHalf||0;ship.nextHalf=0;if(ship.deferredConstant&&ship.deferredSpeedTarget!=null){ship.constant=ship.deferredSpeedTarget;ship.deferredConstant=false;ship.deferredSpeedTarget=null}}
+  if(!ship.dead)endTurnDamageOnline(ship,s.turn,id==='GS-01'?'host':'guest',events);
  }
  const fleetGone=activeFleet(out).length===0;
- out.winner=gun.dead&&fleetGone?'DRAW':gun.dead?'KO-DAN':fleetGone?'STAR LEAGUE':null;
+ const gunLost=gun.dead||gun.pilot>=6;
+ out.winner=gunLost&&fleetGone?'DRAW':gunLost?'KO-DAN':fleetGone?'STAR LEAGUE':null;
  out.lastVolley={turn:s.turn,shots};out.turn++;out.phase=out.winner?'finished':'orders';out.submitted={host:false,guest:false};
  out.log=[...(out.winner?['BATTLE OVER: '+out.winner]:[]),...events,...s.log].slice(0,150);
  return out;
