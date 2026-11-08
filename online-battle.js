@@ -557,6 +557,7 @@ function applySwarm(s,orders,stage='full'){
  // Each vessel plots independently, resolves each entered asteroid hex, and can leave the board.
  function travel(ship,plan,id,side,index){
   if(ship.dead)return;
+  if(side==='host'&&ship.blossomRecharge){ship.lastMove=0;events.push('GS-01 DEATH BLOSSOM RECOVERY · NO MOVEMENT');return}
   let steps=[];
   try{steps=parsePlan(plan||'');predict(ship,plan||'')}
   catch(e){events.push(id+' INVALID VECTOR: '+e.message+' · HOLD');steps=[]}
@@ -619,8 +620,61 @@ function applySwarm(s,orders,stage='full'){
   const n=Math.max(0,1-(ship.laserLoss||0));
   for(let shot=0;shot<n;shot++)shoot(ship,gun,id,'GS-01','laser',++i*7+shot,'guest',0);
  }
+ // FASA 1984 p.21: Swarm fires first. Only then may the Gunstar
+ // activate Death Blossom. Six clockwise firing steps start one side
+ // clockwise from its original facing and end at the original facing.
+ const blossomRequested=host.fire==='blossom';
+ const blossomEligible=!gun.dead&&gun.gunner<6&&gun.unconsciousGunner!==1&&gun.power>=4&&gun.power<=10&&!gun.blossomRecharge;
+ if(gun.blossomRecharge){
+  // Mandatory recovery turn: no movement, weapon fire or alternate orders.
+  if(!gun.powerPlantHitThisTurn){
+   gun.power=Math.min(20,gun.power+5);
+   events.push('GS-01 MANDATORY DEATH BLOSSOM RECHARGE +5 POWER');
+  }else events.push('GS-01 DEATH BLOSSOM RECHARGE INTERRUPTED');
+  gun.blossomRecharge=false;
+ }else if(blossomRequested&&blossomEligible){
+  const originalFacing=gun.d;
+  // Each entry grants one optional photon missile at that orientation.
+  // All functioning lasers and the particle cannon fire automatically.
+  const missileAt=Array.isArray(host.blossomMissiles)?host.blossomMissiles:[];
+  let shotIndex=0;
+  events.push('GS-01 ACTIVATES DEATH BLOSSOM · SIX CLOCKWISE FACINGS');
+  for(let rotation=0;rotation<6;rotation++){
+   gun.d=(gun.d+1)%6;
+   events.push('GS-01 DEATH BLOSSOM ROTATION '+(rotation+1)+'/6 · HEADING '+gun.d);
+   for(const kind of ['laser','particle','missile']){
+    if(kind==='particle'&&gun.particleLost||kind==='missile'&&(gun.missileLost||gun.missiles<=0||missileAt[rotation]!==true))continue;
+    const count=kind==='laser'?Math.max(0,2-(gun.laserLoss||0)):1;
+    for(let weapon=0;weapon<count;weapon++){
+     const candidates=live().filter(([,ship])=>distance(gun,ship)<=(kind==='laser'?10:kind==='particle'?9:8)&&!firingBlocked(gun,ship,rocks)&&arcAllowsSwarm(gun,ship,0));
+     candidates.sort((a,b)=>distance(gun,a[1])-distance(gun,b[1])||a[0].localeCompare(b[0]));
+     // Each firing is independently declared at this orientation, with
+     // default nearest-legal target if a selected target has already died.
+     const targetId=candidates[0]?.[0];
+     if(!targetId)continue;
+     const target=out.fleet[targetId];
+     const previousShots=shots.length;
+     shoot(gun,target,'GS-01',targetId,kind,++shotIndex,'host',0);
+     if(shots.length===previousShots)continue;
+     if(kind==='missile')gun.missiles--;
+     if(shots[shots.length-1].hit){
+      // The printed rule removes hit Swarm craft before the next shot.
+      target.dead=true;target.hp=0;
+      hits[targetId]=[];
+      events.push(targetId+' DESTROYED DURING DEATH BLOSSOM');
+     }
+    }
+   }
+  }
+  gun.d=originalFacing;
+  gun.power=0;gun.blossomRecharge=true;
+  events.push('GS-01 DEATH BLOSSOM FINISHED · POWER 0 · NEXT TURN MUST RECHARGE');
+ }else if(blossomRequested){
+  events.push('GS-01 DEATH BLOSSOM UNAVAILABLE · REQUIRES 4–10 POWER AND OPERATIONAL GUNNER');
+ }
  const selected=(host.fire||'none').split('+').filter(k=>['laser','particle','missile'].includes(k));
- if(host.fire==='guard'&&!(host.plan||'').length){gun.power=Math.min(20,gun.power+5);events.push('GS-01 RECHARGES +5 POWER')}
+ if(gun.blossomRecharge||blossomRequested){/* Death Blossom or recovery already handled above. */}
+ else if(host.fire==='guard'&&!(host.plan||'').length){gun.power=Math.min(20,gun.power+5);events.push('GS-01 RECHARGES +5 POWER')}
  else if(!gun.dead&&gun.power>0&&gun.gunner<6&&gun.unconsciousGunner!==1){
   if(selected.length||host.plan){gun.power=Math.max(0,gun.power-1)}
   const cap=Math.max(1,3-Math.max(Math.floor((gun.engine||0)/4),Math.floor((gun.hull||0)/8)));
