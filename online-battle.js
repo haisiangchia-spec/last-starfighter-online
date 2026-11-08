@@ -170,11 +170,12 @@ function initialDoubles(asteroids=false,seed=1984){
 const weaponRanges={laser:10,particle:9,missile:8};
 const weaponLabels={laser:'LASER',particle:'PARTICLE CANNON',missile:'PHOTON MISSILE'};
 const weaponId=(kind,i)=>kind+(i+1);
-function weaponTargets(battle,slot,kind,i,arc=0){
+function weaponArc(slot,order,kind,i){if(kind!=='laser')return 0;if(teamSide(slot)==='host')return Number(order?.arc??0);if(i===2)return 3;return i===0?Number(order?.portLaserArc??0):Number(order?.starboardLaserArc??0)}
+function weaponTargets(battle,slot,kind,i,arc=0,order=null){
  const ship=slot==='guest'&&isSwarm(battle)?null:battle.ships[slot];
  if(!ship||ship.dead)return [];
  const candidates=isSwarm(battle)?(teamSide(slot)==='host'?activeFleet(battle):[['host',battle.ships.host]]):activeSlots(battle).filter(enemy=>teamSide(enemy)!==teamSide(slot)).map(id=>[id,battle.ships[id]]);
- const gun=teamSide(slot)==='host',laserArc=kind==='laser'?(gun?Number(arc):i===2?3:0):0;
+ const gun=teamSide(slot)==='host',laserArc=weaponArc(slot,order||battle.movementOrders?.[slot]||{arc},kind,i);
  const allowed=({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[laserArc]||[];
  const rocks=rocksFor(battle);
  return candidates.filter(([,enemy])=>!enemy.dead&&!firingBlocked(ship,enemy,rocks)&&distance(ship,enemy)<=weaponRanges[kind]&&allowed.includes((facingToTarget(ship,enemy)-ship.d+6)%6))
@@ -184,7 +185,7 @@ function weaponTargets(battle,slot,kind,i,arc=0){
 function declaredTarget(battle,slot,order,kind,i,arc,legacyTarget){
  const selected=order.targets?.[weaponId(kind,i)];
  if(selected==='none')return null;
- const legal=weaponTargets(battle,slot,kind,i,arc).map(x=>x.id);
+ const legal=weaponTargets(battle,slot,kind,i,arc,order).map(x=>x.id);
  if(order.targets)return legal.includes(selected)?selected:null;
  return legacyTarget||legal[0]||null;
 }
@@ -231,7 +232,7 @@ function applyDoubles(s,orders,stage='full'){
    if(kind==='missile'&&ship.missiles<=0)continue;
    const count=kind==='laser'?Math.max(0,(teamSide(slot)==='host'?2:3)-(ship.laserLoss||0)):1;
    for(let i=0;i<count;i++){
-    const arc=kind==='laser'?(teamSide(slot)==='host'?Number(o.arc??0):i===2?3:0):0;
+    const arc=weaponArc(slot,o,kind,i);
     const chosen=declaredTarget(out,slot,o,kind,i,arc,targetSlot);
     if(!chosen)continue;
     const enemy=out.ships[chosen];
@@ -323,7 +324,7 @@ function apply(s,orders,stage='full'){
    if(kind==='missile'&&(ship.missiles??4)<1){events.push(label+' OUT OF MISSILES');continue}
    const n=kind==='laser'?Math.max(0,(teamSide(side)==='host'?2:3)-(ship.laserLoss||0)):1;
    for(let i=0;i<n;i++){
-    const arc=kind!=='laser'?0:teamSide(side)==='host'?Number(o.arc??0):i===2?3:0;
+    const arc=weaponArc(side,o,kind,i);
     const chosen=declaredTarget(out,side,o,kind,i,arc,enemySide);
     if(!chosen)continue;
     const range=distance(ship,enemy),rocks=firingRocks;
@@ -507,7 +508,7 @@ let lastTurn=0,autoAttemptTurn='',targetDraft={},targetDraftKey='';
 function renderTargetChoices(){
  const stage=state?.phase==='targeting';
  $('targetingPanel').hidden=!stage;
- if(!stage){$('arc').disabled=teamSide(role)==='guest';$('plan').disabled=false;$('recharge').disabled=!!state?.submitted?.[role];return}
+ if(!stage){$('arc').disabled=teamSide(role)==='guest';$('portLaserArc').disabled=teamSide(role)==='host'||!!state?.submitted?.[role];$('starboardLaserArc').disabled=teamSide(role)==='host'||!!state?.submitted?.[role];$('plan').disabled=false;$('recharge').disabled=!!state?.submitted?.[role];return}
  if(!role)return;
  const key=state.matchId+':'+state.turn+':'+role;
  if(targetDraftKey!==key){targetDraftKey=key;targetDraft={};
@@ -518,6 +519,9 @@ function renderTargetChoices(){
  const movement=state.movementOrders?.[role]||{};
  const arc=Number(movement.arc??0);
  $('arc').value=String(arc);
+ $('portLaserArc').value=String(movement.portLaserArc??0);
+ $('starboardLaserArc').value=String(movement.starboardLaserArc??0);
+ $('portLaserArc').disabled=true;$('starboardLaserArc').disabled=true;
  $('arc').disabled=true;
  $('recharge').disabled=!!state.submitted[role]||(movement.plan||'').length>0;
  $('plan').disabled=true;
@@ -531,7 +535,7 @@ function renderTargetChoices(){
   if(swarmGuest)continue;
   if(!selected.includes(kind))continue;
   if((kind==='particle'&&ship.particleLost)||(kind==='missile'&&(ship.missileLost||ship.missiles<=0)))continue;
-  const id=weaponId(kind,i),legal=weaponTargets(state,role,kind,i,arc);
+  const id=weaponId(kind,i),legal=weaponTargets(state,role,kind,i,arc,movement);
   if(!(id in targetDraft))targetDraft[id]=legal[0]?.id||'none';
   if(targetDraft[id]!=='none'&&!legal.some(t=>t.id===targetDraft[id]))targetDraft[id]=legal[0]?.id||'none';
   const title=kind==='laser'?('LASER '+(i+1)):weaponLabels[kind];
@@ -543,7 +547,7 @@ function renderTargetChoices(){
  $('weaponTargetRows').innerHTML=rows.join('');
  for(const input of $('weaponTargetRows').querySelectorAll('select.target-assignment'))input.onchange=()=>{targetDraft[input.dataset.weapon]=input.value};
 }
-function render(){if(!state||!role)return;showBattleResult();if(lastTurn&&state.turn!==lastTurn){$('map').style.filter=''}lastTurn=state.turn;$('asteroidSync').textContent=state.asteroids?.length?'ASTEROID FIELD ACTIVE · '+state.asteroids.length+' ROCKS':'CLEAR SPACE · NO ASTEROIDS';$('turn').textContent=state.turn;$('hull').textContent=`${state.ships[role].hull||0}/20`;$('log').textContent=state.log.join('\n');const swarmGuest=isSwarm(state)&&role==='guest';const doubles=state.scenario==='doubles';const enemies=doubles?battleSlots.filter(x=>teamSide(x)!==teamSide(role)&&!state.ships[x].dead):[];const selectedTarget=doubles&&enemies.includes($('targetShip').value)?$('targetShip').value:enemies[0];$('targetShipWrap').hidden=true;if(doubles){$('targetShip').innerHTML=enemies.map(x=>'<option value="'+x+'">'+(x==='host'?'GS-01':x==='host2'?'GS-02':x==='guest'?'DF-01':'DF-02')+'</option>').join('');$('targetShip').value=selectedTarget||'';}const self=swarmGuest?(state.fleet?.[selectedSwarm]||activeFleet(state)[0]?.[1]||state.ships.guest):state.ships[role],enemy=state.ships[doubles?(selectedTarget|| (teamSide(role)==='host'?'guest':'host')):(role==='host'?'guest':'host')],inspect=(!isSwarm(state)&&inspectedSide)?state.ships[inspectedSide]:self;$('swarmControls').hidden=!swarmGuest;$('swarmScenario').textContent=isSwarm(state)?'SWARM: 14 CONTACTS':doubles?'DUEL: 2v2 · FOUR SHIPS':'DUEL: 1v1';if(swarmGuest){const options=activeFleet(state).map(([id])=>id);if(!options.includes(selectedSwarm))selectedSwarm=options[0]||'SW-01';$('swarmShip').innerHTML=options.map(id=>'<option value="'+id+'">'+id+' · '+(state.fleet[id].hp||0)+' HP</option>').join('');$('swarmShip').value=selectedSwarm;$('swarmCount').textContent=options.length+' fighters remaining · '+Object.keys(swarmPlans).length+' vectors stored';}else $('swarmCount').textContent=isSwarm(state)?activeFleet(state).length+' enemies remaining':'';$('heading').textContent=facingNames[self.d??0]+' ('+((self.d??0)*60)+'°)';$('range').textContent=distance(self,enemy)+' hexes';$('target').textContent=blocked(self,enemy,rocksFor(state))?'BLOCKED BY ASTEROID':inArc(self,enemy)?'IN FORWARD ARC':'OUTSIDE ARC';$('enemyHull').textContent=isSwarm(state)&&role==='host'?activeFleet(state).length+' FIGHTERS':(enemy.hull||0)+'/20';$('power').textContent=(inspect.power??20)+'/20';$('missiles').textContent=inspect.missiles??4;$('shipName').textContent=inspectedSide&&!isSwarm(state)?(teamSide(inspectedSide)==='host'?'GUNSTAR '+(inspectedSide==='host2'?'GS-02':'GS-01'):'DECK FIGHTER '+(inspectedSide==='guest2'?'DF-02':'DF-01')):swarmGuest?selectedSwarm:teamSide(role)==='host'?'GUNSTAR '+(role==='host2'?'GS-02':'GS-01'):'DECK FIGHTER '+(role==='guest2'?'DF-02':'DF-01');$('shipFaction').textContent=teamSide(inspectedSide||role)==='host'?'STAR LEAGUE':'KO-DAN';$('arc').disabled=state.phase==='targeting'||teamSide(role)==='guest';for(const k of ['laser','particle','missile'])$(k).disabled=swarmGuest||state.phase!=='targeting';$('powerBar').style.width=(Math.max(0,Math.min(20,inspect.power??20))/20*100)+'%';$('hullBar').style.width=(Math.max(0,Math.min(20,inspect.hull||0))/20*100)+'%';const localGun=teamSide(inspectedSide||role)==='host',lasers=localGun?2:3,engineArcs=Math.max(Math.floor((inspect.engine||0)/2),Math.floor((inspect.hull||0)/4)),systemArcs=Math.max(Math.floor((inspect.engine||0)/4),Math.floor((inspect.hull||0)/8)),targetArcs=Math.min(4,Math.max(engineArcs,inspect.aim||0)),powered=Math.max(1,3-systemArcs),crewState=(kind)=>{const hits=inspect[kind]||0,u=inspect[kind==='pilot'?'unconsciousPilot':'unconsciousGunner'];return hits>=6?'KILLED':u===2?'UNCONSCIOUS · MUST MISS TURN':u===1?'UNCONSCIOUS · RECOVERY CHECK':hits?'WOUNDED ('+hits+'/6)':'FIT'},line=(label,value)=>{const v=String(value),n=parseInt(v,10)||0;let severity='';if(/KILLED|DESTROYED|SHIP DESTROYED|PILOT DEAD|FAILURE|NO POWER/.test(v))severity='critical';else if(/DAMAGED|WOUNDED|UNCONSCIOUS|RANDOM|FORCED|HALF SPEED|NO SPEED CHANGE|DEFERRED|MUST MOVE|STRAIGHT ONLY|NO LEFT|NO RIGHT|ARC\\(S\\) LOST|STEERING RESTRICTION/.test(v))severity='warning';else if(label==='ENGINE DAMAGE'&&n>0||label==='VECTOR SYSTEMS'&&n>0||label==='TARGETING'&&v!=='NOMINAL'||label==='LASER MOUNTS'&&n<parseInt(v.split('/')[1],10)||label==='FIRE CHANNELS'&&n<3||label==='HULL STATUS'&&v!=='INTACT'||label==='PILOT'&&v!=='FIT'||label==='GUNNER'&&v!=='FIT'||label==='STABILIZER'&&v!=='OPERATIONAL'||label==='PARTICLE CANNON'&&v!=='OPERATIONAL'||label==='MISSILE RACK'&&v!=='OPERATIONAL'||label==='STEERING'&&v!=='NORMAL'||label==='SPEED LOCK'&&v!=='NONE'||label==='NEXT-TURN DAMAGE'&&v!=='NONE'||label==='FIRE STATUS'&&v!=='READY')severity='warning';return '<div class="telemetry-line'+(severity?' '+severity:'')+'"><span>'+label+'</span><span>'+v+'</span></div>'},restrictNames={lockL:'FORCED LEFT EACH HEX',lockR:'FORCED RIGHT EACH HEX',lockF:'STRAIGHT ONLY',noL:'NO LEFT TURNS',noR:'NO RIGHT TURNS'},future=[];if(inspect.nextRestrict)future.push('STEERING RESTRICTION');if(inspect.nextStabilizer)future.push('RANDOM MANOEUVRE');if(inspect.nextHalf)future.push('HALF SPEED ×'+inspect.nextHalf);if(inspect.nextConstant)future.push('NO SPEED CHANGE');if(inspect.deferredConstant)future.push('DEFERRED NO SPEED CHANGE · '+(inspect.deferredSpeedTurns||0)+' HALF-SPEED TURN(S) LEFT');
+function render(){if(!state||!role)return;showBattleResult();if(lastTurn&&state.turn!==lastTurn){$('map').style.filter=''}lastTurn=state.turn;$('asteroidSync').textContent=state.asteroids?.length?'ASTEROID FIELD ACTIVE · '+state.asteroids.length+' ROCKS':'CLEAR SPACE · NO ASTEROIDS';$('turn').textContent=state.turn;$('hull').textContent=`${state.ships[role].hull||0}/20`;$('log').textContent=state.log.join('\n');const swarmGuest=isSwarm(state)&&role==='guest';const doubles=state.scenario==='doubles';const enemies=doubles?battleSlots.filter(x=>teamSide(x)!==teamSide(role)&&!state.ships[x].dead):[];const selectedTarget=doubles&&enemies.includes($('targetShip').value)?$('targetShip').value:enemies[0];$('targetShipWrap').hidden=true;if(doubles){$('targetShip').innerHTML=enemies.map(x=>'<option value="'+x+'">'+(x==='host'?'GS-01':x==='host2'?'GS-02':x==='guest'?'DF-01':'DF-02')+'</option>').join('');$('targetShip').value=selectedTarget||'';}const self=swarmGuest?(state.fleet?.[selectedSwarm]||activeFleet(state)[0]?.[1]||state.ships.guest):state.ships[role],enemy=state.ships[doubles?(selectedTarget|| (teamSide(role)==='host'?'guest':'host')):(role==='host'?'guest':'host')],inspect=(!isSwarm(state)&&inspectedSide)?state.ships[inspectedSide]:self;$('swarmControls').hidden=!swarmGuest;$('swarmScenario').textContent=isSwarm(state)?'SWARM: 14 CONTACTS':doubles?'DUEL: 2v2 · FOUR SHIPS':'DUEL: 1v1';if(swarmGuest){const options=activeFleet(state).map(([id])=>id);if(!options.includes(selectedSwarm))selectedSwarm=options[0]||'SW-01';$('swarmShip').innerHTML=options.map(id=>'<option value="'+id+'">'+id+' · '+(state.fleet[id].hp||0)+' HP</option>').join('');$('swarmShip').value=selectedSwarm;$('swarmCount').textContent=options.length+' fighters remaining · '+Object.keys(swarmPlans).length+' vectors stored';}else $('swarmCount').textContent=isSwarm(state)?activeFleet(state).length+' enemies remaining':'';$('heading').textContent=facingNames[self.d??0]+' ('+((self.d??0)*60)+'°)';$('range').textContent=distance(self,enemy)+' hexes';$('target').textContent=blocked(self,enemy,rocksFor(state))?'BLOCKED BY ASTEROID':inArc(self,enemy)?'IN FORWARD ARC':'OUTSIDE ARC';$('enemyHull').textContent=isSwarm(state)&&role==='host'?activeFleet(state).length+' FIGHTERS':(enemy.hull||0)+'/20';$('power').textContent=(inspect.power??20)+'/20';$('missiles').textContent=inspect.missiles??4;$('shipName').textContent=inspectedSide&&!isSwarm(state)?(teamSide(inspectedSide)==='host'?'GUNSTAR '+(inspectedSide==='host2'?'GS-02':'GS-01'):'DECK FIGHTER '+(inspectedSide==='guest2'?'DF-02':'DF-01')):swarmGuest?selectedSwarm:teamSide(role)==='host'?'GUNSTAR '+(role==='host2'?'GS-02':'GS-01'):'DECK FIGHTER '+(role==='guest2'?'DF-02':'DF-01');$('shipFaction').textContent=teamSide(inspectedSide||role)==='host'?'STAR LEAGUE':'KO-DAN';$('arc').disabled=state.phase==='targeting'||teamSide(role)==='guest';$('deckLaserArcs').hidden=teamSide(role)==='host';$('deckLaserArcs').style.display=teamSide(role)==='host'?'none':'grid';for(const k of ['laser','particle','missile'])$(k).disabled=swarmGuest||state.phase!=='targeting';$('powerBar').style.width=(Math.max(0,Math.min(20,inspect.power??20))/20*100)+'%';$('hullBar').style.width=(Math.max(0,Math.min(20,inspect.hull||0))/20*100)+'%';const localGun=teamSide(inspectedSide||role)==='host',lasers=localGun?2:3,engineArcs=Math.max(Math.floor((inspect.engine||0)/2),Math.floor((inspect.hull||0)/4)),systemArcs=Math.max(Math.floor((inspect.engine||0)/4),Math.floor((inspect.hull||0)/8)),targetArcs=Math.min(4,Math.max(engineArcs,inspect.aim||0)),powered=Math.max(1,3-systemArcs),crewState=(kind)=>{const hits=inspect[kind]||0,u=inspect[kind==='pilot'?'unconsciousPilot':'unconsciousGunner'];return hits>=6?'KILLED':u===2?'UNCONSCIOUS · MUST MISS TURN':u===1?'UNCONSCIOUS · RECOVERY CHECK':hits?'WOUNDED ('+hits+'/6)':'FIT'},line=(label,value)=>{const v=String(value),n=parseInt(v,10)||0;let severity='';if(/KILLED|DESTROYED|SHIP DESTROYED|PILOT DEAD|FAILURE|NO POWER/.test(v))severity='critical';else if(/DAMAGED|WOUNDED|UNCONSCIOUS|RANDOM|FORCED|HALF SPEED|NO SPEED CHANGE|DEFERRED|MUST MOVE|STRAIGHT ONLY|NO LEFT|NO RIGHT|ARC\\(S\\) LOST|STEERING RESTRICTION/.test(v))severity='warning';else if(label==='ENGINE DAMAGE'&&n>0||label==='VECTOR SYSTEMS'&&n>0||label==='TARGETING'&&v!=='NOMINAL'||label==='LASER MOUNTS'&&n<parseInt(v.split('/')[1],10)||label==='FIRE CHANNELS'&&n<3||label==='HULL STATUS'&&v!=='INTACT'||label==='PILOT'&&v!=='FIT'||label==='GUNNER'&&v!=='FIT'||label==='STABILIZER'&&v!=='OPERATIONAL'||label==='PARTICLE CANNON'&&v!=='OPERATIONAL'||label==='MISSILE RACK'&&v!=='OPERATIONAL'||label==='STEERING'&&v!=='NORMAL'||label==='SPEED LOCK'&&v!=='NONE'||label==='NEXT-TURN DAMAGE'&&v!=='NONE'||label==='FIRE STATUS'&&v!=='READY')severity='warning';return '<div class="telemetry-line'+(severity?' '+severity:'')+'"><span>'+label+'</span><span>'+v+'</span></div>'},restrictNames={lockL:'FORCED LEFT EACH HEX',lockR:'FORCED RIGHT EACH HEX',lockF:'STRAIGHT ONLY',noL:'NO LEFT TURNS',noR:'NO RIGHT TURNS'},future=[];if(inspect.nextRestrict)future.push('STEERING RESTRICTION');if(inspect.nextStabilizer)future.push('RANDOM MANOEUVRE');if(inspect.nextHalf)future.push('HALF SPEED ×'+inspect.nextHalf);if(inspect.nextConstant)future.push('NO SPEED CHANGE');if(inspect.deferredConstant)future.push('DEFERRED NO SPEED CHANGE · '+(inspect.deferredSpeedTurns||0)+' HALF-SPEED TURN(S) LEFT');
 $('weaponDetail').innerHTML=[line('LASER MOUNTS',Math.max(0,lasers-(inspect.laserLoss||0))+' / '+lasers+' OPERATIONAL'),line('PARTICLE CANNON',inspect.particleLost?'DESTROYED':'OPERATIONAL'),line('MISSILE RACK',inspect.missileLost?'DESTROYED':'OPERATIONAL'),line('PHOTON AMMO',(inspect.missiles??4)+' REMAINING'),line('FIRE CHANNELS',powered+' AVAILABLE / 3'),line('TARGETING',targetArcs?'+'+targetArcs+' TO ATTACK ROLL':'NOMINAL'),line('FIRE STATUS',inspect.dead?'SHIP DESTROYED':localGun&&inspect.gunner>=6?'GUNNER KILLED':inspect.unconsciousGunner===1?'GUNNER UNCONSCIOUS':inspect.power<=0?'NO POWER':'READY')].join('');
 $('crewDetail').innerHTML=[line('PILOT',crewState('pilot')),...(localGun?[line('GUNNER',crewState('gunner'))]:[]),line('LIFE SUPPORT',inspect.life?'FAILURE · '+inspect.life+' TURN(S) LEFT':'OPERATIONAL'),line('NEXT-TURN DAMAGE',future.join(' / ')||'NONE'),line('ASTEROID CHECKS',(inspect.asteroidChecks||0)+' CHECKS / '+(inspect.asteroidImpacts||0)+' COLLISIONS'),line('HULL STATUS',inspect.dead?'DESTROYED':inspect.hull?'DAMAGED · '+inspect.hull+'/20':'INTACT')].join('');
 $('damage').textContent='HULL '+(inspect.hull||0)+'/20 · ENGINE '+(inspect.engine||0)+'/10 · AIM +'+(inspect.aim||0)+' · PILOT '+(inspect.pilot||0)+'/6';
@@ -561,7 +565,7 @@ $('submit').onclick=async()=>{
     const match=/^(laser|particle|missile)([1-3])$/.exec(id);
     if(!match)continue;
     const kind=match[1],i=Number(match[2])-1;
-    const allowed=weaponTargets(state,role,kind,i,Number(moves.arc??0)).some(x=>x.id===chosen);
+    const allowed=weaponTargets(state,role,kind,i,Number(moves.arc??0),moves).some(x=>x.id===chosen);
     if(chosen!=='none'&&!allowed)throw Error('Invalid target for '+id);
     legalTargets[id]=chosen;
    }
@@ -570,7 +574,7 @@ $('submit').onclick=async()=>{
    const plan=$('plan').value.trim().toUpperCase(),swarmGuest=isSwarm(state)&&role==='guest';
    if(swarmGuest){predict(state.fleet[selectedSwarm],plan);swarmPlans[selectedSwarm]=plan;for(const [id,ship] of activeFleet(state))predict(ship,swarmPlans[id]||'')}
    else predict(state.ships[role],plan);
-   batch.set(orderRef(state.turn,role),{owner:uid,turn:state.turn,plan:swarmGuest?'':plan,fire:swarmGuest?'laser':rechargeQueued?'guard':chosenWeapons(),arc:Number($('arc').value),fleetPlans:swarmGuest?swarmPlans:{},target:''});
+   batch.set(orderRef(state.turn,role),{owner:uid,turn:state.turn,plan:swarmGuest?'':plan,fire:swarmGuest?'laser':rechargeQueued?'guard':chosenWeapons(),arc:Number($('arc').value),portLaserArc:Number($('portLaserArc').value),starboardLaserArc:Number($('starboardLaserArc').value),fleetPlans:swarmGuest?swarmPlans:{},target:''});
   }
   batch.update(battleRef(),{[`submitted.${role}`]:true});
   await batch.commit();lastOrderError='';
