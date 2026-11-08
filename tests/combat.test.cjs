@@ -12,7 +12,7 @@ assert.ok(start>=0&&end>start,'Combat engine source boundaries changed');
 const engine=source.slice(start,end);
 const sandbox={structuredClone,console};
 vm.createContext(sandbox);
-vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget,prepareTemporaryOnline,endTurnDamageOnline,predict,moveLimit,turnLimit};',sandbox,{filename:'online-battle.js'});
+vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget,prepareTemporaryOnline,endTurnDamageOnline,predict,moveLimit,turnLimit,fireControlCrewReason,usableWeaponKinds};',sandbox,{filename:'online-battle.js'});
 const c=sandbox.combat;
 const orders=(host={plan:'',fire:'none'},guest={plan:'',fire:'none'})=>({host,guest});
 function scenario(){const s=c.initial(false);s.log=[];return s}
@@ -861,4 +861,38 @@ test('milestone 2: all 36 printed damage-table cells produce their expected subs
    assert.ok(ship.laserLoss||ship.particleLost||ship.missileLost,'X must disable a weapon: '+code);
   }
  }
+});
+
+test('milestone 2: destroyed weapon groups are excluded before power-channel limits',()=>{
+ const gun=c.initial(false).ships.host;gun.engine=8;gun.laserLoss=2;
+ assert.deepEqual(Array.from(c.usableWeaponKinds(gun,'host',['laser','particle','missile'])),['particle','missile']);
+ gun.particleLost=true;
+ assert.deepEqual(Array.from(c.usableWeaponKinds(gun,'host',['laser','particle','missile'])),['missile']);
+ gun.missileLost=true;
+ assert.equal(c.usableWeaponKinds(gun,'host',['laser','particle','missile']).length,0);
+});
+test('milestone 2: gunner can fire after pilot death, but not after gunner incapacitation',()=>{
+ const gun=c.initial(false).ships.host;gun.pilot=6;
+ assert.equal(c.fireControlCrewReason(gun,'host'),null);
+ gun.gunner=6;
+ assert.match(c.fireControlCrewReason(gun,'host'),/GUNNER KILLED/);
+ gun.gunner=0;gun.unconsciousGunner=1;
+ assert.match(c.fireControlCrewReason(gun,'host'),/GUNNER UNCONSCIOUS/);
+ const deck=c.initial(false).ships.guest;deck.pilot=6;
+ assert.match(c.fireControlCrewReason(deck,'guest'),/PILOT KILLED/);
+});
+test('milestone 2: 2v2 gunstar pilot casualty does not prevent gunner firing while teammate remains alive',()=>{
+ let state=c.initialDoubles(false);
+ state.ships.host.pilot=6;state.ships.host.gunner=0;
+ state.ships.host.q=4;state.ships.host.r=4;state.ships.host.d=0;
+ state.ships.guest.q=7;state.ships.guest.r=4;
+ for(const side of Object.keys(state.ships))state.ships[side].power=20;
+ const order=Object.fromEntries(Object.keys(state.ships).map(slot=>[slot,{
+  plan:'',fire:slot==='host'?'laser':'none',arc:0,targets:{laser1:'guest',laser2:'guest'}
+ }]));
+ const afterMove=c.apply(state,order,'move');
+ assert.equal(afterMove.phase,'targeting','Remaining teammate keeps battle alive');
+ const outcome=c.apply(afterMove,order,'fire');
+ assert.ok(outcome.log.some(x=>x.includes('HOST LASER')&&x.includes('GUEST')),
+  'Gunner should resolve a laser attack despite dead pilot');
 });
