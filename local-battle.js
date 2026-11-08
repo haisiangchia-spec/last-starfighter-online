@@ -219,9 +219,9 @@ function render(){
  if(asteroidButton)asteroidButton.onclick=()=>{
   $('missile').checked=true;
   // Prioritize the selected photon launcher without changing the simulation's weapon capacity.
-  if(Math.max(1,3-Math.max(Math.floor((ship.engine||0)/4),Math.floor((ship.hull||0)/8)))===1){
-   $('laser').checked=false;$('particle').checked=false;
-  }
+  const capacity=Math.max(1,3-Math.max(Math.floor((ship.engine||0)/4),Math.floor((ship.hull||0)/8)));
+  // Ensure missile remains in the first 'capacity' weapon groups after damage limits.
+  if(capacity<3){$('laser').checked=false;if(capacity===1)$('particle').checked=false;}
   targetDraft={};render();
  };
  $('blossom').disabled=scenario!=='swarm'||phase!=='targeting'||(!blossomMode&&(ship.power<4||ship.power>10||!!ship.blossomRecharge||ship.gunner>=6||ship.unconsciousGunner===1));
