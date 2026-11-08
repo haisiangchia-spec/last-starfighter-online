@@ -9,7 +9,7 @@ function make(id,type,team,q,r,d){return{id,type,team,q,r,d,power:20,hull:0,engi
 // Each map contains two seven-hex clusters and 10–20 single-hex asteroids.
 function placeAsteroidCounters(){
  const occupied=ships,nearShip=(q,r)=>occupied.some(ship=>dist({q,r},ship)<=1);
- const total=2+10+Math.floor(gameRandom()*11);
+
  const counters=[];
  const candidates=[];
  for(let q=6;q<=12;q++)for(let r=2;r<=10;r++)candidates.push({q,r});
@@ -22,6 +22,7 @@ function placeAsteroidCounters(){
   counters.push({type:'large',hexes:hexes.map(([q,r])=>key(q,r))});
  }
  if(counters.length!==2)throw Error('Unable to place two large asteroid counters');
+ const total=2+10+Math.floor(gameRandom()*11);
  const candidatesSmall=[];
  for(let q=5;q<=13;q++)for(let r=0;r<NR;r++)candidatesSmall.push({q,r});
  for(let i=candidatesSmall.length-1;i>0;i--){let j=Math.floor(gameRandom()*(i+1));[candidatesSmall[i],candidatesSmall[j]]=[candidatesSmall[j],candidatesSmall[i]]}
