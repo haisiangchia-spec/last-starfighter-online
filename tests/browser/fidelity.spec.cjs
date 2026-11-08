@@ -381,7 +381,7 @@ test('lobby routes local AI through multiplayer tactical interface and excludes 
 });
 for(const localScenario of ['duel','swarm'])test('shared multiplayer battle UI works for local '+localScenario+' AI',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
- await page.goto('/local-battle.html?scenario='+localScenario);
+ await page.goto('/local-battle.html?scenario='+localScenario+'&seed=1984');
  await expect(page.locator('#identity')).toContainText('LOCAL AI');
  await expect(page.locator('#localScenario')).toHaveValue(localScenario);
  await expect(page.locator('#battleQuickStatus')).toBeVisible();
