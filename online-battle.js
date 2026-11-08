@@ -133,6 +133,71 @@ function recoverCrewOnline(ship,crew,turn,side,events){
  if(sum>=threshold){ship[field]=0;events.push(side.toUpperCase()+' '+crew.toUpperCase()+' RECOVERS '+sum+' >= '+threshold)}
  else events.push(side.toUpperCase()+' '+crew.toUpperCase()+' STILL UNCONSCIOUS '+sum+' < '+threshold);
 }
+
+// Milestone 2: one end-of-turn status transition for 1v1 and 2v2.
+// Mirrors local prepareTemporary(): stabilizer overrides steering; half speed
+// precedes a deferred constant-speed restriction for two complete turns.
+function prepareTemporaryOnline(ship,turn,side,events){
+ const label=side.toUpperCase(),priorSpeed=ship.lastMove??0;
+ ship.stabilizer=ship.nextStabilizer?1:0;
+ if(ship.stabilizer){
+  if(ship.nextRestrict)events.push(label+' STEERING RESTRICTION IGNORED · STABILIZER TAKES PRECEDENCE');
+  ship.restrict=null;ship.deferredRestrict=0;
+ }else{
+  const options=['lockL','lockF','lockR','noL','noR'];
+  const salt=side==='host'?11:side==='host2'?17:side==='guest'?37:53;
+  ship.restrict=ship.nextRestrict?options[(roll(turn*333+salt)-1)%options.length]:null;
+  ship.deferredRestrict=0;
+ }
+ const newSpeedLock=(ship.nextConstant||0)>0,newHalf=ship.nextHalf||0;
+ ship.constant=null;
+ if(newSpeedLock&&newHalf){
+  ship.deferredSpeedTarget=priorSpeed;
+  ship.deferredSpeedTurns=2;
+  ship.deferredConstant=true;
+  events.push(label+' SPEED CONFLICT · HALF SPEED FOR TWO TURNS, THEN SPEED LOCK '+priorSpeed);
+ }else if(newSpeedLock){
+  ship.constant=priorSpeed;
+  ship.deferredConstant=false;
+  ship.deferredSpeedTurns=0;
+  ship.deferredSpeedTarget=null;
+ }
+ if((ship.deferredSpeedTurns||0)>0){
+  ship.half=Math.max(1,newHalf);
+  ship.deferredSpeedTurns--;
+  ship.deferredConstant=true;
+  events.push(label+' HALF SPEED ACTIVE · '+ship.deferredSpeedTurns+' RESTRICTED TURN(S) REMAIN');
+ }else{
+  ship.half=newHalf;
+  if(ship.deferredConstant&&ship.deferredSpeedTarget!==null&&ship.deferredSpeedTarget!==undefined){
+   ship.constant=ship.deferredSpeedTarget;
+   ship.deferredConstant=false;
+   ship.deferredSpeedTarget=null;
+   events.push(label+' DEFERRED SPEED LOCK ACTIVE · '+ship.constant+' HEXES');
+  }
+ }
+ ship.nextRestrict=0;ship.nextStabilizer=0;ship.nextConstant=0;ship.nextHalf=0;
+ if(ship.restrict)events.push(label+' STEERING RESTRICTION ACTIVE · '+ship.restrict);
+ if(ship.stabilizer)events.push(label+' STABILIZER DAMAGED · RANDOM MANOEUVRE EACH STEP');
+ if(ship.half)events.push(label+' HALF SPEED · '+ship.half+' HIT(S)');
+ if(ship.constant!==null&&ship.constant!==undefined)events.push(label+' CONSTANT SPEED · '+ship.constant+' HEXES');
+}
+function endTurnDamageOnline(ship,turn,side,events){
+ recoverCrewOnline(ship,'pilot',turn,side,events);
+ if(teamSide(side)==='host')recoverCrewOnline(ship,'gunner',turn,side,events);
+ if(ship.life>0){
+  ship.life--;
+  events.push(side.toUpperCase()+' LIFE SUPPORT · '+ship.life+' TURN(S) REMAIN');
+  if(ship.life===0){
+   ship.pilot=6;
+   ship.killedSpeed=ship.lastMove??0;
+   ship.unconsciousPilot=0;
+   events.push(side.toUpperCase()+' LIFE SUPPORT EXPIRED · PILOT KILLED');
+  }
+ }
+ prepareTemporaryOnline(ship,turn,side,events);
+ ship.powerPlantHitThisTurn=false;
+}
 function damageEffects(ship,before,side,events){
  const id=side==='host'?'GS-01':side==='host2'?'GS-02':side==='guest2'?'DF-02':'DF-01',engineArcs=Math.max(Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)),movement=moveLimit(ship),targeting=Math.min(4,Math.max(engineArcs,ship.aim||0));
  if(ship.hull!==before.hull)events.push(id+' FUSELAGE +'+(ship.hull-before.hull)+' → '+ship.hull+'/20; mobility '+movement+' hexes; targeting +'+targeting+'.');
@@ -149,7 +214,7 @@ function damageEffects(ship,before,side,events){
  if(ship.dead&&!before.dead)events.push(id+' EXPLODES / REMOVED FROM ACTIVE PLAY.');
  if(ship.pilot>=6&&before.pilot<6&&!ship.dead)events.push(id+' PILOT KILLED — CRAFT CONTINUES AT PREVIOUS SPEED WITH RANDOM STABILIZER; GUNNER MAY STILL FIRE.');
 }
-function damageShip(ship,kind,turn,side,events,collisionTable=null){const before={...ship};const salt=teamSide(side)==='host'?19:47;const red=roll(turn*1009+salt),white=roll(turn*3001+salt),table=collisionTable??Math.max(1,Math.min(6,red+(kind==='particle'?1:kind==='missile'?-1:0))),code=damageRows[table-1][white-1];events.push(`${teamSide(side)==='host'?'STAR LEAGUE':'KO-DAN'} DAMAGE ${collisionTable?'COLLISION SPEED '+collisionTable:'RED '+red} WHITE ${white} → TABLE ${table}: ${code}`);for(const part of code.split(',')){const c=part[0],n=Number(part.slice(1))||1;if(c==='F')ship.hull=(ship.hull||0)+n;if(c==='E')ship.engine=(ship.engine||0)+n;if(c==='P'){ship.power=Math.max(0,(ship.power??20)-n);ship.powerPlantHitThisTurn=true}if(c==='T')ship.aim=(ship.aim||0)+1;if(c==='W'){const crew=teamSide(side)==='host'&&roll(turn*587+salt)>3?'gunner':'pilot';const previous=ship[crew]||0;ship[crew]=previous+1;crewInjuryCheck(ship,crew,previous,turn,salt,events,side)}if(c==='K'){const crew=teamSide(side)==='host'&&roll(turn*593+salt)>3?'gunner':'pilot';ship[crew]=6;if(crew==='pilot')ship.killedSpeed=ship.lastMove??0;ship[crew==='pilot'?'unconsciousPilot':'unconsciousGunner']=0}if(c==='D')ship.dead=true;if(c==='X'){const z=roll(turn*511+salt),maxLasers=teamSide(side)==='host'?2:3;if(z<=2){if((ship.laserLoss||0)<maxLasers)ship.laserLoss=(ship.laserLoss||0)+1;else events.push(side.toUpperCase()+' ALL LASER TURRETS ALREADY DESTROYED')}else if(z<=4){if(ship.particleLost)events.push(side.toUpperCase()+' PARTICLE CANNON ALREADY DESTROYED');ship.particleLost=true}else{if(ship.missileLost)events.push(side.toUpperCase()+' MISSILE RACK ALREADY DESTROYED');ship.missileLost=true}events.push(side.toUpperCase()+' WEAPON DESTRUCTION DIE '+z+' → '+(z<=2?'LASER':z<=4?'PARTICLE':'MISSILE'))}if(c==='L'){if(!ship.life)ship.life=6;else events.push(side.toUpperCase()+' REPEATED LIFE SUPPORT HIT · NO ADDITIONAL EFFECT')}if(c==='R')ship.nextRestrict=(ship.nextRestrict||0)+1;if(c==='S')ship.nextStabilizer=(ship.nextStabilizer||0)+1;if(c==='H')ship.nextHalf=(ship.nextHalf||0)+1;if(c==='N')ship.nextConstant=(ship.nextConstant||0)+1}ship.hp=Math.max(0,20-(ship.hull||0));if((ship.hull||0)>=20||(ship.engine||0)>=10)ship.dead=true;if(ship.dead)ship.hp=0;const name=teamSide(side)==='host'?'GS-01':'DF-01';const changes=[['FUSELAGE','hull'],['ENGINE','engine'],['POWER','power'],['TARGETING','aim'],['PILOT','pilot'],['GUNNER','gunner'],['LASERS LOST','laserLoss'],['MISSILES','missiles']].filter(([,k])=>(ship[k]??0)!==(before[k]??0)).map(([label,k])=>label+' '+(before[k]??0)+' → '+(ship[k]??0));for(const [label,k] of [['PARTICLE CANNON','particleLost'],['MISSILE RACK','missileLost'],['DESTROYED','dead']])if(!!ship[k]!==!!before[k])changes.push(label+' '+(ship[k]?'YES':'NO'));for(const [label,k] of [['STEERING RESTRICTION','nextRestrict'],['STABILIZER','nextStabilizer'],['HALF SPEED','nextHalf'],['NO SPEED CHANGE','nextConstant'],['LIFE SUPPORT','life']])if((ship[k]??0)!==(before[k]??0))changes.push(label+' '+(before[k]??0)+' → '+(ship[k]??0));events.push(name+' DAMAGE RESULT: '+(changes.join(' · ')||'NO ADDITIONAL SYSTEM EFFECT'));damageEffects(ship,before,side,events);}
+function damageShip(ship,kind,turn,side,events,collisionTable=null){const before={...ship};const salt=teamSide(side)==='host'?19:47;const red=roll(turn*1009+salt),white=roll(turn*3001+salt),table=collisionTable??Math.max(1,Math.min(6,red+(kind==='particle'?1:kind==='missile'?-1:0))),code=damageRows[table-1][white-1];events.push(`${teamSide(side)==='host'?'STAR LEAGUE':'KO-DAN'} DAMAGE ${collisionTable?'COLLISION SPEED '+collisionTable:'RED '+red} WHITE ${white} → TABLE ${table}: ${code}`);for(const part of code.split(',')){const c=part[0],n=Number(part.slice(1))||1;if(c==='F')ship.hull=(ship.hull||0)+n;if(c==='E')ship.engine=(ship.engine||0)+n;if(c==='P'){ship.power=Math.max(0,(ship.power??20)-n);ship.powerPlantHitThisTurn=true}if(c==='T')ship.aim=(ship.aim||0)+1;if(c==='W'){const crew=teamSide(side)==='host'&&roll(turn*587+salt)>3?'gunner':'pilot';const previous=ship[crew]||0;ship[crew]=previous+1;crewInjuryCheck(ship,crew,previous,turn,salt,events,side)}if(c==='K'){const crew=teamSide(side)==='host'&&roll(turn*593+salt)>3?'gunner':'pilot';ship[crew]=6;if(crew==='pilot')ship.killedSpeed=ship.lastMove??0;ship[crew==='pilot'?'unconsciousPilot':'unconsciousGunner']=0}if(c==='D')ship.dead=true;if(c==='X'){const z=roll(turn*511+salt),maxLasers=teamSide(side)==='host'?2:3;if(z<=2){if((ship.laserLoss||0)<maxLasers)ship.laserLoss=(ship.laserLoss||0)+1;else events.push(side.toUpperCase()+' ALL LASER TURRETS ALREADY DESTROYED')}else if(z<=4){if(ship.particleLost)events.push(side.toUpperCase()+' PARTICLE CANNON ALREADY DESTROYED');ship.particleLost=true}else{if(ship.missileLost)events.push(side.toUpperCase()+' MISSILE RACK ALREADY DESTROYED');ship.missileLost=true}events.push(side.toUpperCase()+' WEAPON DESTRUCTION DIE '+z+' → '+(z<=2?'LASER':z<=4?'PARTICLE':'MISSILE'))}if(c==='L'){if(!ship.life)ship.life=6;else events.push(side.toUpperCase()+' REPEATED LIFE SUPPORT HIT · NO ADDITIONAL EFFECT')}if(c==='R')ship.nextRestrict=(ship.nextRestrict||0)+1;if(c==='S')ship.nextStabilizer=(ship.nextStabilizer||0)+1;if(c==='H')ship.nextHalf=(ship.nextHalf||0)+1;if(c==='N')ship.nextConstant=(ship.nextConstant||0)+1}ship.hp=Math.max(0,20-(ship.hull||0));if((ship.hull||0)>=20||(ship.engine||0)>=10)ship.dead=true;if(ship.dead)ship.hp=0;const name=side==='host'?'GS-01':side==='host2'?'GS-02':side==='guest2'?'DF-02':'DF-01';const changes=[['FUSELAGE','hull'],['ENGINE','engine'],['POWER','power'],['TARGETING','aim'],['PILOT','pilot'],['GUNNER','gunner'],['LASERS LOST','laserLoss'],['MISSILES','missiles']].filter(([,k])=>(ship[k]??0)!==(before[k]??0)).map(([label,k])=>label+' '+(before[k]??0)+' → '+(ship[k]??0));for(const [label,k] of [['PARTICLE CANNON','particleLost'],['MISSILE RACK','missileLost'],['DESTROYED','dead']])if(!!ship[k]!==!!before[k])changes.push(label+' '+(ship[k]?'YES':'NO'));for(const [label,k] of [['STEERING RESTRICTION','nextRestrict'],['STABILIZER','nextStabilizer'],['HALF SPEED','nextHalf'],['NO SPEED CHANGE','nextConstant'],['LIFE SUPPORT','life']])if((ship[k]??0)!==(before[k]??0))changes.push(label+' '+(before[k]??0)+' → '+(ship[k]??0));events.push(name+' DAMAGE RESULT: '+(changes.join(' · ')||'NO ADDITIONAL SYSTEM EFFECT'));damageEffects(ship,before,side,events);}
 
 function targetingSnapshot(out,orders,events){
  // Movement and asteroid collisions can decide the match before target declaration.
@@ -279,15 +344,7 @@ function applyDoubles(s,orders,stage='full'){
  }
  for(const slot of battleSlots)for(let i=0;i<hits[slot].length;i++)damageShip(out.ships[slot],hits[slot][i],s.turn*10000+battleSlots.indexOf(slot)*1000+i*37+1,slot,events);
  for(const slot of battleSlots){
-  const sh=out.ships[slot];recoverCrewOnline(sh,'pilot',s.turn,slot,events);
-  if(teamSide(slot)==='host')recoverCrewOnline(sh,'gunner',s.turn,slot,events);
-  if(sh.life>0){sh.life--;if(sh.life===0){sh.pilot=6;sh.killedSpeed=sh.lastMove??0}}
-  if(sh.nextStabilizer){sh.stabilizer=1;sh.nextStabilizer=0;sh.restrict=null;sh.nextRestrict=0}
-  else{sh.stabilizer=0;if(sh.nextRestrict){const options=['lockL','lockF','lockR','noL','noR'];sh.restrict=options[(roll(s.turn*333+battleSlots.indexOf(slot)*11)-1)%5];sh.nextRestrict=0}else sh.restrict=null}
-  if(sh.nextConstant&&sh.nextHalf){sh.deferredConstant=true;sh.deferredSpeedTarget=sh.lastMove??0;sh.deferredSpeedTurns=2;sh.constant=null;sh.nextConstant=0}
-  else if(sh.nextConstant){sh.constant=sh.lastMove??0;sh.nextConstant=0}else sh.constant=null;
-  if(sh.deferredSpeedTurns>0){sh.half=Math.max(1,sh.nextHalf||0);sh.deferredSpeedTurns--;sh.nextHalf=0}
-  else{sh.half=sh.nextHalf||0;sh.nextHalf=0;if(sh.deferredConstant&&sh.deferredSpeedTarget!=null){sh.constant=sh.deferredSpeedTarget;sh.deferredConstant=false;sh.deferredSpeedTarget=null}}
+  const sh=out.ships[slot];endTurnDamageOnline(sh,s.turn,slot,events);
  }
  // A pilot casualty alone does not eliminate a fighter: the hull must be destroyed or leave the starfield.
  const defeated=side=>battleSlots.filter(x=>teamSide(x)===side).every(x=>out.ships[x].dead||out.ships[x].pilot>=6);
@@ -369,10 +426,7 @@ function apply(s,orders,stage='full'){
   const hitSeed=s.turn*10000+(teamSide(side)==='host'?1000:5000)+i*37+1;
   damageShip(out.ships[side],hits[side][i],hitSeed,side,events);
  }
- for(const side of ['host','guest']){const ship=out.ships[side],o=orders[side];recoverCrewOnline(ship,'pilot',s.turn,side,events);if(teamSide(side)==='host')recoverCrewOnline(ship,'gunner',s.turn,side,events);if(ship.life>0){ship.life--;events.push((teamSide(side)==='host'?'STAR LEAGUE':'KO-DAN')+' LIFE SUPPORT '+ship.life+' TURNS REMAIN');if(ship.life===0){ship.pilot=6;ship.killedSpeed=ship.lastMove??0;events.push(side.toUpperCase()+' LIFE SUPPORT EXPIRED · PILOT KILLED')}}if(ship.nextStabilizer){ship.stabilizer=1;ship.nextStabilizer=0;ship.restrict=null;ship.nextRestrict=0;events.push(side.toUpperCase()+' STABILIZER DAMAGE OVERRIDES STEERING RESTRICTION')}else{ship.stabilizer=0;if(ship.nextRestrict){const choices=['lockL','lockF','lockR','noL','noR'];ship.restrict=choices[(roll(s.turn*333+(teamSide(side)==='host'?11:37))-1)%choices.length];ship.nextRestrict=0}else ship.restrict=null}
-if(ship.nextConstant&&ship.nextHalf){ship.deferredConstant=true;ship.deferredSpeedTarget=ship.lastMove??0;ship.deferredSpeedTurns=2;ship.constant=null;ship.nextConstant=0;events.push(side.toUpperCase()+' SPEED CONFLICT: HALF SPEED FOR TWO TURNS BEFORE CONSTANT SPEED')}
-else if(ship.nextConstant){ship.constant=ship.lastMove??0;ship.nextConstant=0}else ship.constant=null;
-if(ship.deferredSpeedTurns>0){ship.half=Math.max(1,ship.nextHalf||0);ship.deferredSpeedTurns--;ship.nextHalf=0}else{ship.half=ship.nextHalf||0;ship.nextHalf=0;if(ship.deferredConstant&&ship.deferredSpeedTarget!==undefined&&ship.deferredSpeedTarget!==null){ship.constant=ship.deferredSpeedTarget;ship.deferredConstant=false;ship.deferredSpeedTarget=null}}}
+ for(const side of ['host','guest'])endTurnDamageOnline(out.ships[side],s.turn,side,events);
  const a=out.ships.host,b=out.ships.guest;
  out.winner=(a.dead||a.pilot>=6)&&(b.dead||b.pilot>=6)?'DRAW':a.dead||a.pilot>=6?'KO-DAN':b.dead||b.pilot>=6?'STAR LEAGUE':null;
  out.lastVolley={turn:s.turn,shots};out.turn++;out.phase=out.winner?'finished':'orders';out.submitted={host:false,guest:false};
