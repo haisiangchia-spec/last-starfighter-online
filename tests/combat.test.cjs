@@ -622,3 +622,18 @@ test('a single successful laser hit destroys a Swarm Ship without a damage-table
  }
  assert.ok(confirmed,'Expected a hit in 25 deterministic turns');
 });
+
+test('Swarm laser uses printed stationary-target bonus',()=>{
+ const battle=c.initialSwarm(false);
+ battle.ships.host.q=8;battle.ships.host.r=6;battle.ships.host.d=0;
+ battle.ships.host.lastMove=0;
+ for(const [id,ship] of Object.entries(battle.fleet)){
+  if(id!=='SW-01')ship.dead=true;
+ }
+ battle.fleet['SW-01'].q=9;battle.fleet['SW-01'].r=6;battle.fleet['SW-01'].d=3;
+ const result=c.apply(battle,{host:{plan:'',fire:'none'},guest:{plan:'',fire:'laser',fleetPlans:{}}},'fire');
+ const line=result.log.find(x=>x.startsWith('SW-01 LASER → GS-01:'));
+ assert.ok(line,'Swarm laser should fire from its forward arc');
+ // Base 4 + zero range increment -1 for a stationary Gunstar = 3.
+ assert.match(line,/VS 3 /);
+});
