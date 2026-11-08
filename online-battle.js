@@ -257,7 +257,7 @@ const weaponId=(kind,i)=>kind+(i+1);
 // FASA 1984 p.19: a photon missile can deliberately target an asteroid hex.
 const asteroidTargetId=(q,r)=>'asteroid:'+q+','+r;
 function parseAsteroidTarget(id,rocks){
- if(typeof id!=='string'||!/^asteroid:\\d+,\\d+$/.test(id))return null;
+ if(typeof id!=='string'||!/^asteroid:\d+,\d+$/.test(id))return null;
  const [q,r]=id.slice(9).split(',').map(Number);
  return rocks.has(rockKey(q,r))?{q,r}:null;
 }
@@ -364,7 +364,20 @@ function applyDoubles(s,orders,stage='full'){
     const arc=weaponArc(slot,o,kind,i);
     const chosen=declaredTarget(out,slot,o,kind,i,arc,targetSlot);
     if(!chosen)continue;
+    const rockTarget=kind==='missile'?parseAsteroidTarget(chosen,rocks):null;
+    if(rockTarget){
+     const preview=availableAsteroidTargets(out,slot,o).find(t=>t.id===chosen);
+     if(!preview){events.push(label+' PHOTON MISSILE → '+chosen+' NO FIRING SOLUTION');continue}
+     const seed=s.turn*2654435761+battleSlots.indexOf(slot)*739+index++*7331+kind.length*131;
+     const d1=roll(seed),d2=roll(seed+517),hit=d1+d2>=preview.toHit;
+     shots.push({side:slot,kind,hit,from:{q:ship.q,r:ship.r},to:rockTarget});
+     events.push(label+' PHOTON MISSILE → '+chosen+' 2D6 '+d1+'+'+d2+' VS '+preview.toHit+' '+(hit?'HIT':'MISS'));
+     if(hit)missileBlast(out,rocks,rockTarget,hits,events,slot);
+     ship.missiles--;
+     continue;
+    }
     const enemy=out.ships[chosen];
+    if(!enemy){events.push(label+' INVALID TARGET '+chosen);continue}
     const relative=(facingToTarget(ship,enemy)-ship.d+6)%6;
     const allowed=({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[arc]?.includes(relative);
     const range=distance(ship,enemy);
@@ -449,6 +462,19 @@ function apply(s,orders,stage='full'){
     const arc=weaponArc(side,o,kind,i);
     const chosen=declaredTarget(out,side,o,kind,i,arc,enemySide);
     if(!chosen)continue;
+    const rockTarget=kind==='missile'?parseAsteroidTarget(chosen,firingRocks):null;
+    if(rockTarget){
+     const preview=availableAsteroidTargets(out,side,o).find(t=>t.id===chosen);
+     if(!preview){events.push(label+' PHOTON MISSILE: NO FIRING SOLUTION');continue}
+     const [d1,d2]=dice(s.turn,side,kind,shotIndex++);
+     const hit=d1+d2>=preview.toHit;
+     shots.push({side,kind,hit,from:{q:ship.q,r:ship.r},to:rockTarget});
+     events.push(label+' PHOTON MISSILE → '+chosen+' 2D6 '+d1+'+'+d2+' VS '+preview.toHit+': '+(hit?'HIT':'MISS'));
+     if(hit)missileBlast(out,firingRocks,rockTarget,hits,events,side);
+     ship.missiles--;events.push(label+' PHOTON MISSILE EXPENDED · '+ship.missiles+' REMAINING');
+     continue;
+    }
+    if(!out.ships[chosen]){events.push(label+' INVALID TARGET '+chosen);continue}
     const range=distance(ship,enemy),rocks=firingRocks;
     if(firingBlocked(ship,enemy,rocks)){events.push(label+' '+kind.toUpperCase()+' '+(i+1)+': ASTEROID BLOCKS LINE OF SIGHT');continue}
     if(range>weaponData[kind].range||!arcAllows(ship,enemy,arc)){events.push(label+' '+kind.toUpperCase()+' '+(i+1)+': NO FIRING SOLUTION ('+range+' HEXES / ARC)');continue}
