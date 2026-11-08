@@ -725,3 +725,11 @@ for(const teamSize of [1,2])test('release gate: '+teamSize+'v'+teamSize+' plays 
  for(const slot of slots.filter(slot=>slot.startsWith('host')))
   assert.equal(state.ships[slot].dead,false);
 });
+
+test('live multiplayer resolution errors remain visible and do not spin the resolve button',()=>{
+ const source=fs.readFileSync(path.join(__dirname,'../online-battle.js'),'utf8');
+ assert.match(source,/resolutionError\?'RESOLUTION FAILED:/);
+ assert.match(source,/!resolutionError&&autoAttemptTurn!==phaseKey/);
+ assert.match(source,/catch\(e\)\{resolutionError=e\?\.message\|\|String\(e\)/);
+ assert.match(source,/\$\('resolve'\)\.onclick=\(\)=>\{resolutionError='';resolveTurn\(\)\}/);
+});
