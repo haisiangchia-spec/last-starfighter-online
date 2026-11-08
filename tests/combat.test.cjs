@@ -698,3 +698,30 @@ test('damaging asteroid collision immediately destroys a Swarm Ship',()=>{
  }
  assert.ok(collided,'Expected a deterministic collision in 40 checked turns');
 });
+
+for(const teamSize of [1,2])test('release gate: '+teamSize+'v'+teamSize+' plays through four legitimate turns to an off-map victory',()=>{
+ let state=teamSize===1?c.initial(false):c.initialDoubles(false);
+ const slots=Object.keys(state.ships);
+ for(let round=1;round<=4;round++){
+  const orders=Object.fromEntries(slots.map(slot=>[slot,{
+   plan:slot.startsWith('guest')?(round===4?'FF':'FFFFF'):'',
+   fire:'none',arc:0,targets:{}
+  }]));
+  state=c.apply(state,orders,'move');
+  if(round===4){
+   assert.equal(state.phase,'finished');
+   assert.equal(state.winner,'STAR LEAGUE');
+   assert.equal(state.turn,4);
+  }else{
+   assert.equal(state.phase,'targeting');
+   state=c.apply(state,orders,'fire');
+   assert.equal(state.phase,'orders');
+   assert.equal(state.turn,round+1);
+   assert.equal(state.winner,null);
+  }
+ }
+ for(const slot of slots.filter(slot=>slot.startsWith('guest')))
+  assert.equal(state.ships[slot].dead,true);
+ for(const slot of slots.filter(slot=>slot.startsWith('host')))
+  assert.equal(state.ships[slot].dead,false);
+});
