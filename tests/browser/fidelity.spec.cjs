@@ -142,6 +142,10 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
     await expect(page.locator('#allowedMoves')).toHaveText(round===1?'5 / 5':/^\d+ \/ 5$/);
     await expect(page.locator('#allowedTurns')).toHaveText(round===1?'3 / 3':/^(\d+ \/ 3|RANDOM)$/);
     await expect(page.locator('#movementRemaining')).toContainText('0 / ');
+    await expect(page.locator('#quickTurn')).toContainText('MOVEMENT');
+    await expect(page.locator('#quickResources')).toContainText('POWER ');
+    await expect(page.locator('#quickResources')).toContainText('HULL ');
+    await expect(page.locator('#quickResources')).toContainText('MISSILES ');
     await expect(page.locator('#laser')).toBeEnabled();
     await page.locator('#submit').click();
     await expect(page.locator('#status')).not.toContainText('ORDER REJECTED',{timeout:15000});
@@ -162,6 +166,7 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
     await expect(page.locator('#movementControls')).toBeHidden();
     await expect(page.locator('#arcSettings')).toBeHidden();
     await expect(page.locator('#targetingPanel')).toBeVisible();
+    await expect(page.locator('#quickTurn')).toContainText('TARGETING');
     const assignments=page.locator('select.target-assignment');
     if(await assignments.count()){
      const options=await assignments.first().locator('option').evaluateAll(nodes=>nodes.map(n=>n.value));
