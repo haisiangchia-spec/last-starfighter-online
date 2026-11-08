@@ -1,6 +1,6 @@
 # The Last Starfighter — Online Lobby Alpha 0.1
 
-This release implements real-time **room creation, joining and readiness**, not shared combat yet. The existing v4.1 single-player/local hot-seat game is preserved in `game.html`.
+This release implements real-time **room creation, joining and readiness**, not shared combat yet. The public lobby now launches local AI Duel and 1v14 Swarm through `local-battle.html`, using the multiplayer tactical screen and a synchronized copy of the online combat engine. The legacy `game.html` remains available for regression testing and compatibility, but local hot-seat/pass-and-play is no longer offered in the lobby.
 
 ## 1. Create your Firebase project
 
