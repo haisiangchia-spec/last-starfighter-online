@@ -12,7 +12,7 @@ assert.ok(start>=0&&end>start,'Combat engine source boundaries changed');
 const engine=source.slice(start,end);
 const sandbox={structuredClone,console};
 vm.createContext(sandbox);
-vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget};',sandbox,{filename:'online-battle.js'});
+vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget};',sandbox,{filename:'online-battle.js'});
 const c=sandbox.combat;
 const orders=(host={plan:'',fire:'none'},guest={plan:'',fire:'none'})=>({host,guest});
 function scenario(){const s=c.initial(false);s.log=[];return s}
@@ -463,4 +463,57 @@ test('1v1 and 2v2 recharge never exceed maximum power',()=>{
   assert.equal(next.ships.host.power,20);
   assert.ok(next.log.some(x=>x.includes('RECHARGES +5 POWER')));
  }
+});
+
+test('movement stage produces visible positions without firing or advancing the turn',()=>{
+ const state=c.initialDoubles(false);
+ const o=Object.fromEntries(Object.keys(state.ships).map(slot=>[slot,{plan:'F',fire:'laser',arc:0}]));
+ const next=c.apply(state,o,'move');
+ assert.equal(next.phase,'targeting');
+ assert.equal(next.turn,1);
+ assert.equal(next.ships.host.q,3);
+ assert.equal(next.ships.guest.q,15);
+ assert.equal(next.lastVolley,undefined);
+ assert.ok(Object.values(next.submitted).every(x=>x===false));
+ assert.equal(next.movementOrders.host.plan,'F');
+});
+test('target selection phase proposes easiest legal targets and allows splitting lasers',()=>{
+ const s=c.initialDoubles(false);
+ s.ships.host.q=8;s.ships.host.r=6;s.ships.host.d=0;
+ s.ships.guest.q=9;s.ships.guest.r=6;s.ships.guest.d=3;
+ s.ships.guest2.q=9;s.ships.guest2.r=7;s.ships.guest2.d=3;
+ const targets=c.weaponTargets(s,'host','laser',0,0);
+ assert.equal(targets.length,2);
+ assert.equal(targets[0].id,'guest');
+ assert.ok(targets.every(t=>t.range<=10));
+ const o=Object.fromEntries(Object.keys(s.ships).map(slot=>[slot,{plan:'',fire:'none',arc:0}]));
+ o.host={plan:'',fire:'laser',arc:0,targets:{laser1:'guest',laser2:'guest2'}};
+ const outcome=c.apply(s,o,'fire');
+ const gun=outcome.lastVolley.shots.filter(x=>x.side==='host'&&x.kind==='laser');
+ assert.equal(gun.length,2);
+ assert.deepEqual(gun.map(x=>[x.to.q,x.to.r]),[[9,6],[9,7]]);
+ assert.equal(outcome.turn,2);
+});
+test('explicit HOLD FIRE does not auto-switch to another target',()=>{
+ const s=c.initialDoubles(false);
+ s.ships.host.q=8;s.ships.host.r=6;s.ships.host.d=0;
+ s.ships.guest.q=9;s.ships.guest.r=6;s.ships.guest2.q=9;s.ships.guest2.r=7;
+ const o=Object.fromEntries(Object.keys(s.ships).map(slot=>[slot,{plan:'',fire:'none',arc:0}]));
+ o.host={plan:'',fire:'laser',arc:0,targets:{laser1:'none',laser2:'guest2'}};
+ const result=c.apply(s,o,'fire');
+ assert.equal(result.lastVolley.shots.filter(x=>x.side==='host').length,1);
+ assert.equal(result.lastVolley.shots.find(x=>x.side==='host').to.r,7);
+});
+test('Swarm movement and firing stages are separate and default targets are ranked',()=>{
+ const s=c.initialSwarm(false);
+ const o={host:{plan:'',fire:'laser',arc:0},guest:{plan:'',fire:'laser',fleetPlans:{}}};
+ const moved=c.apply(s,o,'move');
+ assert.equal(moved.phase,'targeting');assert.equal(moved.turn,1);
+ const eligible=c.weaponTargets(moved,'host','laser',0,0);
+ assert.ok(eligible.length>1);
+ assert.ok(eligible.every((v,i,a)=>i===0||a[i-1].toHit<=v.toHit));
+ const choice=eligible[eligible.length-1].id;
+ const fired=c.apply(moved,{...o,host:{...o.host,targets:{laser1:choice,laser2:'none'}}},'fire');
+ assert.equal(fired.turn,2);assert.equal(fired.phase,'orders');
+ assert.ok(fired.lastVolley.shots.filter(x=>x.side==='host'&&x.kind==='laser').length<=1);
 });
