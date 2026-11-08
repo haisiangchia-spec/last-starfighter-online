@@ -1151,3 +1151,55 @@ test('FASA Swarm Death Blossom optional missile is expended and destroys hit Swa
  }
  assert.ok(found,'A successful deterministic Death Blossom missile should occur');
 });
+
+test('Milestone 2: actual multi-turn Swarm life-support expiry kills Gunstar pilot but preserves craft',()=>{
+ const battle=c.initialSwarm(false);
+ battle.ships.host.life=2;
+ battle.ships.host.lastMove=2;
+ const order={host:{plan:'',fire:'none'},guest:{plan:'',fire:'none',fleetPlans:{}}};
+ const turn1=c.apply(battle,order,'fire');
+ assert.equal(turn1.ships.host.life,1);
+ assert.equal(turn1.ships.host.dead,false);
+ assert.equal(turn1.winner,null);
+ const turn2=c.apply(turn1,order,'fire');
+ assert.equal(turn2.ships.host.life,0);
+ assert.equal(turn2.ships.host.pilot,6);
+ assert.equal(turn2.ships.host.dead,false);
+ assert.equal(turn2.winner,'KO-DAN');
+ assert.equal(turn2.phase,'finished');
+ assert.ok(turn2.log.some(x=>x.includes('LIFE SUPPORT EXPIRED')));
+});
+test('Milestone 2: life support expiry in online Duel and 2v2 is not confused with hull destruction',()=>{
+ for(const [mode,slot] of [['duel','host'],['doubles','host2']]){
+  const battle=mode==='duel'?c.initial(false):c.initialDoubles(false);
+  battle.ships[slot].life=2;
+  battle.ships[slot].lastMove=3;
+  const order=Object.fromEntries(Object.keys(battle.ships).map(x=>[x,{plan:'',fire:'none'}]));
+  const turn1=c.apply(battle,order,'fire');
+  const turn2=c.apply(turn1,order,'fire');
+  assert.equal(turn1.ships[slot].life,1);
+  assert.equal(turn2.ships[slot].pilot,6);
+  assert.equal(turn2.ships[slot].dead,false);
+  assert.ok(turn2.log.some(x=>x.includes('LIFE SUPPORT EXPIRED')));
+ }
+});
+test('Milestone 2: full turn transitions preserve deferred-speed collision priority in Duel and 2v2',()=>{
+ for(const mode of ['duel','doubles']){
+  let state=mode==='duel'?c.initial(false):c.initialDoubles(false);
+  const slot=mode==='duel'?'host':'host2';
+  state.ships[slot].nextHalf=1;state.ships[slot].nextConstant=1;state.ships[slot].lastMove=3;
+  const order=Object.fromEntries(Object.keys(state.ships).map(x=>[x,{plan:'',fire:'none'}]));
+  state=c.apply(state,order,'fire');
+  assert.equal(state.ships[slot].half,1);
+  assert.equal(state.ships[slot].deferredSpeedTurns,1);
+  assert.equal(state.ships[slot].constant,null);
+  state=c.apply(state,order,'fire');
+  assert.equal(state.ships[slot].half,1);
+  assert.equal(state.ships[slot].deferredSpeedTurns,0);
+  assert.equal(state.ships[slot].constant,null);
+  state=c.apply(state,order,'fire');
+  assert.equal(state.ships[slot].half,0);
+  assert.equal(state.ships[slot].constant,3);
+  assert.equal(state.ships[slot].deferredConstant,false);
+ }
+});
