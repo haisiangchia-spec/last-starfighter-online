@@ -36,19 +36,19 @@ service cloud.firestore {
         || (resource.data.guest2Uid == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guest2Ready'])
           && request.resource.data.guest2Ready is bool)
-        || (resource.data.hostUid == null && resource.data.ownerUid != request.auth.uid
+        || (resource.data.hostUid == null && !owner()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hostUid','hostName'])
           && request.resource.data.hostUid == request.auth.uid
           && request.resource.data.hostName is string && request.resource.data.hostName.size() >= 1 && request.resource.data.hostName.size() <= 24)
-        || (resource.data.guestUid == null && resource.data.ownerUid != request.auth.uid
+        || (resource.data.guestUid == null && !owner()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guestUid','guestName'])
           && request.resource.data.guestUid == request.auth.uid
           && request.resource.data.guestName is string && request.resource.data.guestName.size() >= 1 && request.resource.data.guestName.size() <= 24)
-        || (resource.data.host2Uid == null && resource.data.ownerUid != request.auth.uid
+        || (resource.data.host2Uid == null && !owner()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['host2Uid','host2Name'])
           && request.resource.data.host2Uid == request.auth.uid
           && request.resource.data.host2Name is string && request.resource.data.host2Name.size() >= 1 && request.resource.data.host2Name.size() <= 24)
-        || (resource.data.guest2Uid == null && resource.data.hostUid != request.auth.uid
+        || (resource.data.guest2Uid == null && !owner()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['guest2Uid','guest2Name'])
           && request.resource.data.guest2Uid == request.auth.uid
           && request.resource.data.guest2Name is string && request.resource.data.guest2Name.size() >= 1 && request.resource.data.guest2Name.size() <= 24)
