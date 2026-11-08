@@ -101,7 +101,17 @@ function firingTargets(){
    rows.push('<label>'+kind.toUpperCase()+' '+(i+1)+'</label><select class="target-assignment" data-weapon="'+id+'"><option value="none">HOLD FIRE</option>'+options.map(t=>'<option value="'+t.id+'"'+(selected===t.id?' selected':'')+'>'+(t.id.startsWith('asteroid:')?'CLEAR ASTEROID '+t.id.slice(9):t.id.toUpperCase())+' · '+t.range+' HEX · TO HIT '+t.toHit+'</option>').join('')+'</select>');
   }
  }
- return rows.join('')||'<small>No legal weapon targets. You may hold fire.</small>';
+ if(!rows.length){
+  const asteroidOptions=weaponTargets(state,'host','missile',0,0,movementOrders.host).filter(t=>t.id.startsWith('asteroid:'));
+  const missileReady=!ship.missileLost&&(ship.missiles??0)>0;
+  if(!asteroids||!(state.asteroids||[]).length)return '<div class="movement-restrictions warning">NO TARGETS IN RANGE / ARC. There are no asteroids on this map. You may hold fire.</div>';
+  if(!missileReady)return '<div class="movement-restrictions warning">NO LEGAL TARGETS. PHOTON MISSILES '+(ship.missileLost?'DAMAGED':'DEPLETED')+'; asteroid targeting requires an operational missile.</div>';
+  if(asteroidOptions.length&&!$('missile').checked){
+   return '<div class="movement-restrictions warning">NO SHIP TARGETS FOR THE SELECTED WEAPONS. '+asteroidOptions.length+' ASTEROID HEX(ES) CAN BE TARGETED WITH PHOTON MISSILES.</div><button type="button" id="chooseAsteroidMissile" class="primary">SELECT PHOTON MISSILE · ASTEROID</button>';
+  }
+  return '<div class="movement-restrictions warning">NO LEGAL TARGETS FOR SELECTED WEAPONS. Photon missiles can target asteroids up to 8 hexes ahead, within the forward firing arc and with a clear line of sight. No asteroid currently meets those conditions.</div>';
+ }
+ return rows.join('');
 }
 
 function blossomRows(){
@@ -205,6 +215,15 @@ function render(){
   render()
  });
  document.querySelectorAll('select.target-assignment').forEach(el=>el.onchange=()=>{targetDraft[el.dataset.weapon]=el.value});
+ const asteroidButton=$('chooseAsteroidMissile');
+ if(asteroidButton)asteroidButton.onclick=()=>{
+  $('missile').checked=true;
+  // Prioritize the selected photon launcher without changing the simulation's weapon capacity.
+  if(Math.max(1,3-Math.max(Math.floor((ship.engine||0)/4),Math.floor((ship.hull||0)/8)))===1){
+   $('laser').checked=false;$('particle').checked=false;
+  }
+  targetDraft={};render();
+ };
  $('blossom').disabled=scenario!=='swarm'||phase!=='targeting'||(!blossomMode&&(ship.power<4||ship.power>10||!!ship.blossomRecharge||ship.gunner>=6||ship.unconsciousGunner===1));
  $('battleResult').hidden=phase!=='finished';
  if(phase==='finished'){set('resultTitle',state.winner==='STAR LEAGUE'?'STAR LEAGUE VICTORY':state.winner==='KO-DAN'?'KO-DAN VICTORY':'BATTLE COMPLETE');set('resultDescription','Turn '+state.turn+' · '+state.winner)}
