@@ -521,3 +521,32 @@ test('Swarm movement and firing stages are separate and default targets are rank
  assert.equal(fired.turn,2);assert.equal(fired.phase,'orders');
  assert.ok(fired.lastVolley.shots.filter(x=>x.side==='host'&&x.kind==='laser').length<=1);
 });
+
+test('best-target picker includes targeting-system and engine damage in displayed hit threshold',()=>{
+ const state=c.initialDoubles(false);
+ state.ships.host.q=8;state.ships.host.r=6;state.ships.host.d=0;
+ state.ships.host.engine=4;state.ships.host.aim=3;state.ships.host.hull=0;
+ state.ships.guest.q=9;state.ships.guest.r=6;state.ships.guest.lastMove=1;
+ state.ships.guest2.q=9;state.ships.guest2.r=7;state.ships.guest2.lastMove=0;
+ const options=c.weaponTargets(state,'host','laser',0,0);
+ assert.equal(options.length,2);
+ // Range 1, base 3, targeting damage +3 => 6; target stationary receives -1.
+ assert.equal(options.find(x=>x.id==='guest').toHit,6);
+ // Range 2, base 3, targeting damage +3, stationary -1 => 6.
+ assert.equal(options.find(x=>x.id==='guest2').toHit,6);
+ assert.equal(options[0].id,'guest');
+});
+test('declared firing target is locked even when another target is a better shot',()=>{
+ const state=c.initialDoubles(false);
+ state.ships.host.q=8;state.ships.host.r=6;state.ships.host.d=0;
+ state.ships.guest.q=9;state.ships.guest.r=6;
+ state.ships.guest2.q=9;state.ships.guest2.r=7;
+ const choices=c.weaponTargets(state,'host','laser',0,0);
+ assert.equal(choices[0].id,'guest');
+ const o=Object.fromEntries(Object.keys(state.ships).map(slot=>[slot,{plan:'',fire:'none',arc:0}]));
+ o.host={plan:'',fire:'laser',arc:0,targets:{laser1:'guest2',laser2:'none'}};
+ const resolved=c.apply(state,o,'fire');
+ const shots=resolved.lastVolley.shots.filter(x=>x.side==='host');
+ assert.equal(shots.length,1);
+ assert.equal(shots[0].to.q,9);assert.equal(shots[0].to.r,7);
+});
