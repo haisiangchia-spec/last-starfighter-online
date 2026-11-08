@@ -7,7 +7,7 @@ const vm=require('node:vm');
 const path=require('node:path');
 const source=fs.readFileSync(path.join(__dirname,'../online-battle.js'),'utf8');
 const start=source.indexOf('const dirs=');
-const end=source.indexOf('function applySwarm(');
+const end=source.indexOf('let visualEffects=null');
 assert.ok(start>=0&&end>start,'Combat engine source boundaries changed');
 const engine=source.slice(start,end);
 const sandbox={structuredClone,console};
