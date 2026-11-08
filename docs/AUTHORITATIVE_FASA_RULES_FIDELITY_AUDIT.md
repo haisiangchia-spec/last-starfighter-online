@@ -70,3 +70,13 @@ The engine avoids overlapping asteroid hexes and provides at least one clear hex
 **This is intentional rather than a missing feature. Do not schedule player-chosen asteroid count, manual placement, or exact printed counter-placement procedure for future work unless the owner changes the house rule.**
 
 Source-level regression verification: **94/94 tests passed** after the four-ship clearance correction. Browser CI has not yet been verified green for these commits.
+
+## Implementation update — 2026-11-08: Death Blossom in Swarm combat engine
+
+The `online-battle.js` Swarm combat engine now handles an explicit `host.fire === 'blossom'` after the Ko-Dan ships have fired, matching the FASA p.21 ordering. Eligibility is an operational Gunstar gunner, no ongoing mandatory recovery, and **4–10 auxiliary power** (consistent with the local implementation). The Gunstar then rotates clockwise through six headings, resolves surviving laser/particle weapons at each heading, and may fire one **optional, ammo-consuming photon missile per selected orientation**. It preserves its original final heading, spends all remaining power, and is required to remain stationary and refrain from firing during the following recharge turn (+5 power unless recharge is interrupted).
+
+For future interactive Swarm support, orders may include `blossomArcs[rotation]`, `blossomTargets[rotation]` keyed by `laser1`, `laser2`, `particle1`, `missile1`, and `blossomMissiles[rotation]` as booleans; absent declarations use nearest eligible Swarm target, while `none` explicitly holds fire. Swarm ships struck by each shot (including missile splash) are removed immediately rather than being re-targeted in subsequent rotations.
+
+**Important:** Swarm matchmaking remains forbidden in the online lobby and Firestore rules. Thus this is an **engine implementation**, not a claim that users can activate Death Blossom in online multiplayer today. Local `game.html` still supplies the interactive Death Blossom experience. Browser end-to-end validation, including full rotation-selection UI and networked Swarm sequencing, remains an acceptance gap.
+
+Tests: the isolated source-level harness passed **98/98** including power boundaries, recovery, optional missile, immediate splash deaths and hold-fire declarations. CI subsequently exposed a Node VM cross-realm array `deepStrictEqual` assertion in the asteroid layout test; this has been corrected in commit `065d7fa`, but the latest CI run is not yet verified.
