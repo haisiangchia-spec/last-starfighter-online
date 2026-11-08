@@ -216,3 +216,68 @@ test('Gunstar may decline Death Blossom after Swarm fire and finish normal firin
  expect(final.history.filter(line=>line.includes('DEATH BLOSSOM ROTATION'))).toHaveLength(0);
  expect(errors).toEqual([]);
 });
+
+for(const size of [1,2])test('release gate: real '+size+'v'+size+' completes from lobby to winner and survives result reload',async({browser})=>{
+ test.setTimeout(240000);
+ const pilots=[];
+ try{
+  for(let i=0;i<size*2;i++)pilots.push(await openPilot(browser));
+  const host=pilots[0].page;
+  await host.locator('#create').click();
+  await expect(host.locator('#roomPanel')).toBeVisible();
+  const room=(await host.locator('#roomCode').textContent()).trim();
+  expect(room).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
+  for(let i=1;i<pilots.length;i++){
+   const page=pilots[i].page;
+   await page.locator('#joinFaction').selectOption(i<size?'host':'guest');
+   await page.locator('#codeInput').fill(room);
+   await page.locator('#join').click();
+   await expect(page.locator('#roomPanel')).toBeVisible();
+  }
+  // Use a clear starfield so off-map victory is deterministic and requires no test-only state mutation.
+  await host.locator('#lobbyAsteroids').uncheck();
+  for(const {page} of pilots)await page.locator('#ready').click();
+  await expect(host.locator('#launch')).toBeEnabled({timeout:20000});
+  for(const {page} of pilots){
+   await page.goto('/online-battle.html?emulator=1#room='+room);
+   await expect(page.locator('#turn')).toHaveText('1',{timeout:30000});
+   await expect(page.locator('#asteroidSync')).toContainText('CLEAR SPACE');
+  }
+  for(let round=1;round<=4;round++){
+   for(let i=0;i<pilots.length;i++){
+    const page=pilots[i].page;
+    await expect(page.locator('#submit')).toHaveText('COMMIT MOVEMENT',{timeout:30000});
+    await expect(page.locator('#turn')).toHaveText(String(round));
+    for(const kind of ['laser','particle','missile'])await page.locator('#'+kind).uncheck();
+    // Deck Fighters move west toward and eventually off the left edge; Gunstar ships hold.
+    await page.locator('#plan').fill(i<size?'':round===4?'FF':'FFFFF');
+    await page.locator('#submit').click();
+    await expect(page.locator('#status')).not.toContainText('ORDER REJECTED');
+   }
+   if(round<4){
+    for(const {page} of pilots){
+     await expect(page.locator('#targetingPanel')).toBeVisible({timeout:30000});
+     await expect(page.locator('#submit')).toHaveText('LOCK WEAPON TARGETS');
+    }
+    for(const {page} of pilots)await page.locator('#submit').click();
+    for(const {page} of pilots)await expect(page.locator('#turn')).toHaveText(String(round+1),{timeout:30000});
+   }else{
+    for(let i=0;i<pilots.length;i++){
+     const page=pilots[i].page;
+     await expect(page.locator('#battleResult')).toBeVisible({timeout:30000});
+     await expect(page.locator('#resultTitle')).toContainText(i<size?'VICTORY · STAR LEAGUE':'DEFEAT · STAR LEAGUE');
+     await expect(page.locator('#targetingPanel')).toBeHidden();
+     await expect(page.locator('#submit')).toBeDisabled();
+    }
+   }
+  }
+  // Result state must survive reload on both sides, without reopening movement orders.
+  for(let i of [0,pilots.length-1]){
+   const page=pilots[i].page;
+   await page.reload();
+   await expect(page.locator('#battleResult')).toBeVisible({timeout:30000});
+   await expect(page.locator('#resultTitle')).toContainText(i<size?'VICTORY · STAR LEAGUE':'DEFEAT · STAR LEAGUE');
+  }
+  for(const pilot of pilots)expect(pilot.errors).toEqual([]);
+ }finally{await Promise.all(pilots.map(p=>p.context.close()))}
+});
