@@ -148,7 +148,8 @@ function render(){
  set('allowedMoves',moveLimit(ship)+' / '+(scenario==='swarm'?5:5));set('allowedTurns',turnLimit(ship)+' / 3');
  const restrictions=[ship.stabilizer?'STABILIZER DAMAGED · RANDOM MANOEUVRE':'',ship.restrict?'STEERING · '+ship.restrict:'',ship.half?'HALF SPEED ×'+ship.half:'',ship.constant!=null?'LOCKED SPEED '+ship.constant:'',ship.unconsciousPilot?'PILOT UNCONSCIOUS':'',ship.blossomRecharge?'DEATH BLOSSOM RECHARGE':''].filter(Boolean);
  set('movementRestrictions',restrictions.join(' · ')||'Movement systems nominal.');
- set('moveChips',$('plan').value||'HOLD');set('movementRemaining',$('plan').value.length+' / '+moveLimit(ship)+' steps');
+ $('moveChips').innerHTML=[...$('plan').value.toUpperCase()].map((step,i)=>'<span class="chip">'+(i+1)+' · '+({F:'FWD',L:'LEFT',R:'RIGHT'}[step]||'?')+'</span>').join('')||'<span class="muted">HOLD POSITION</span>';
+ set('movementRemaining',$('plan').value.length+' / '+moveLimit(ship)+' steps · route preview on map');
  try{const p=predict(ship,$('plan').value.toUpperCase());set('preview','END HEX '+p.q+','+p.r+' · '+face[p.d])}catch(e){set('preview','INVALID VECTOR: '+e.message)}
  set('shipName','GS-01 · GUNSTAR');set('shipFaction','STAR LEAGUE');
  set('power',ship.power+' / 20');$('powerBar').style.width=Math.max(0,ship.power*5)+'%';
@@ -209,8 +210,40 @@ function draw(){
  }
  for(const key of rocksFor(state)){const [q,r]=key.split(',').map(Number);hex(q,r,'#684821','#c89550')}
  const mark=(q,r,d,label,color,dead=false)=>{if(dead)return;const [x,y]=point(q,r);const angle=d*Math.PI/3,rx=R*.5;ctx.save();ctx.translate(x,y);ctx.rotate(angle);ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(rx,0);ctx.lineTo(-rx*.7,-rx*.58);ctx.lineTo(-rx*.7,rx*.58);ctx.closePath();ctx.fill();ctx.restore();ctx.fillStyle=color;ctx.font='bold '+Math.max(9,R*.4)+'px monospace';ctx.textAlign='center';ctx.fillText(label,x,y-R*.8)};
- const a=player();mark(a.q,a.r,a.d,'GS-01','#66f7ff',a.dead);
+ const a=player();
+ // Plot a live, uncommitted movement route on the tactical map. Each F/L/R
+ // moves one hex *before* changing the heading, exactly as predict() does.
+ // Keep the original ship visible: a cyan ghost marks the current planned
+ // location, and numbered waypoints show how each additional step changes it.
+ const plan=state.phase==='orders'?$('plan').value.trim().toUpperCase():'';
+ let route=null;
+ if(plan&&/^[FLR]{1,5}$/.test(plan)){
+  try{
+   predict(a,plan); // Validate the complete route before presenting a legal ghost.
+   route=[{q:a.q,r:a.r,d:a.d}];
+   for(let n=1;n<=plan.length;n++)route.push(predict(a,plan.slice(0,n)));
+  }catch(e){route=null}
+ }
+ if(route?.length>1){
+  ctx.save();
+  ctx.strokeStyle='#50ffe7';ctx.lineWidth=Math.max(2,R*.085);
+  ctx.setLineDash([Math.max(4,R*.22),Math.max(3,R*.15)]);
+  ctx.beginPath();route.forEach((p,i)=>{const [x,y]=point(p.q,p.r);i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+  ctx.stroke();ctx.setLineDash([]);
+  for(let i=1;i<route.length;i++){
+   const p=route[i],[x,y]=point(p.q,p.r);
+   hex(p.q,p.r,'rgba(20,135,140,.22)','#72ffe3');
+   ctx.fillStyle='#e7fffb';ctx.font='bold '+Math.max(11,R*.48)+'px monospace';
+   ctx.textAlign='center';ctx.fillText(String(i),x+R*.28,y-R*.31);
+  }
+  ctx.restore();
+ }
+ mark(a.q,a.r,a.d,route?'GS-01 · START':'GS-01','#66f7ff',a.dead);
  for(const t of enemy())mark(t.q,t.r,t.d,t.id,'#ff657c',t.dead);
+ if(route?.length>1){
+  const final=route[route.length-1];
+  mark(final.q,final.r,final.d,'PLANNED · '+plan.length,'#76ffe0',a.dead);
+ }
 }
 $('map').onclick=e=>{
  const canvas=$('map'),rect=canvas.getBoundingClientRect();
