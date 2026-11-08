@@ -27,10 +27,12 @@ test('lobby requires a name, randomizes initial faction and seed, and defaults a
   const seed=Number(await page.locator('#seedStatus').textContent());
   expect(Number.isInteger(seed)&&seed>=1&&seed<=4294967295).toBe(true);
   // An independently generated room gets a new random seed, not a fixed default.
+  const previousRoom=(await page.locator('#roomCode').textContent()).trim();
   await page.locator('#create').click();
-  await expect(page.locator('#roomPanel')).toBeVisible();
+  await expect(page.locator('#roomCode')).not.toHaveText(previousRoom,{timeout:30000});
   const second=Number(await page.locator('#seedStatus').textContent());
   expect(second).not.toBe(seed);
+  await expect(page.locator('#lobbyAsteroids')).toBeChecked();
   expect(pilot.errors).toEqual([]);
  }finally{await pilot.context.close()}
 });
