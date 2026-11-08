@@ -254,6 +254,25 @@ function initialDoubles(asteroids=false,seed=1984){
 const weaponRanges={laser:10,particle:9,missile:8};
 const weaponLabels={laser:'LASER',particle:'PARTICLE CANNON',missile:'PHOTON MISSILE'};
 const weaponId=(kind,i)=>kind+(i+1);
+// FASA 1984 p.19: a photon missile can deliberately target an asteroid hex.
+const asteroidTargetId=(q,r)=>'asteroid:'+q+','+r;
+function parseAsteroidTarget(id,rocks){
+ if(typeof id!=='string'||!/^asteroid:\\d+,\\d+$/.test(id))return null;
+ const [q,r]=id.slice(9).split(',').map(Number);
+ return rocks.has(rockKey(q,r))?{q,r}:null;
+}
+function availableAsteroidTargets(battle,slot,order){
+ const ship=battle.ships[slot];
+ if(!ship||ship.dead)return [];
+ const rocks=rocksFor(battle);
+ const penalty=Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)));
+ return [...rocks].map(key=>{const [q,r]=key.split(',').map(Number);return {q,r,id:asteroidTargetId(q,r)}})
+ .filter(target=>distance(ship,target)<=8&&distance(ship,target)>0&&
+  [5,0,1].includes((facingToTarget(ship,target)-ship.d+6)%6)&&!blocked(ship,target,rocks)&&
+  !(rocks.has(rockKey(ship.q,ship.r))))
+ .map(target=>({id:target.id,range:distance(ship,target),toHit:5+distance(ship,target)-1+penalty+1}))
+ .sort((a,b)=>a.toHit-b.toHit||a.id.localeCompare(b.id));
+}
 function weaponArc(slot,order,kind,i){if(kind!=='laser')return 0;if(teamSide(slot)==='host')return Number(order?.arc??0);if(i===2)return 3;return i===0?Number(order?.portLaserArc??0):Number(order?.starboardLaserArc??0)}
 // Match the local game's separate pilot/gunner firing responsibilities.
 function fireControlCrewReason(ship,slot){
@@ -282,14 +301,15 @@ function weaponTargets(battle,slot,kind,i,arc=0,order=null){
  const gun=teamSide(slot)==='host',laserArc=weaponArc(slot,order||battle.movementOrders?.[slot]||{arc},kind,i);
  const allowed=({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[laserArc]||[];
  const rocks=rocksFor(battle);
- return candidates.filter(([,enemy])=>!enemy.dead&&!firingBlocked(ship,enemy,rocks)&&distance(ship,enemy)<=weaponRanges[kind]&&allowed.includes((facingToTarget(ship,enemy)-ship.d+6)%6))
+ const targets=candidates.filter(([,enemy])=>!enemy.dead&&!firingBlocked(ship,enemy,rocks)&&distance(ship,enemy)<=weaponRanges[kind]&&allowed.includes((facingToTarget(ship,enemy)-ship.d+6)%6))
  .map(([id,enemy])=>{
   const base=kind==='laser'&&isSwarm(battle)&&teamSide(slot)==='guest'?4:kind==='laser'?3:kind==='particle'?4:5;
   const penalty=isSwarm(battle)?Math.min(4,ship.aim||0):Math.min(4,Math.max(ship.aim||0,Math.floor((ship.engine||0)/2),Math.floor((ship.hull||0)/4)));
   const toHit=base+Math.max(1,distance(ship,enemy))-1+penalty+(enemy.lastMove===0?-1:0)+(rocks.has(rockKey(ship.q,ship.r))?1:0)+(rocks.has(rockKey(enemy.q,enemy.r))?1:0);
   return {id,range:distance(ship,enemy),toHit};
  })
- .sort((a,b)=>a.toHit-b.toHit||a.range-b.range||a.id.localeCompare(b.id));
+ ;
+ return [...targets,...(kind==='missile'?availableAsteroidTargets(battle,slot,order):[])].sort((a,b)=>a.toHit-b.toHit||a.range-b.range||a.id.localeCompare(b.id));
 }
 function declaredTarget(battle,slot,order,kind,i,arc,legacyTarget){
  const selected=order.targets?.[weaponId(kind,i)];
@@ -713,7 +733,7 @@ function renderTargetChoices(){
   if(!(id in targetDraft))targetDraft[id]=legal[0]?.id||'none';
   if(targetDraft[id]!=='none'&&!legal.some(t=>t.id===targetDraft[id]))targetDraft[id]=legal[0]?.id||'none';
   const title=kind==='laser'?('LASER '+(i+1)):weaponLabels[kind];
-  const opts=[['none','HOLD FIRE'],...legal.map(t=>[t.id,t.id.toUpperCase()+' · '+t.range+' HEXES · TO HIT '+t.toHit])];
+  const opts=[['none','HOLD FIRE'],...legal.map(t=>[t.id,(t.id.startsWith('asteroid:')?'CLEAR ASTEROID '+t.id.slice(9):t.id.toUpperCase())+' · '+t.range+' HEXES · TO HIT '+t.toHit])];
   rows.push('<label style="display:grid;gap:5px"><strong>'+title+'</strong><select class="target-assignment" data-weapon="'+id+'">'+opts.map(([v,l])=>'<option value="'+v+'"'+(targetDraft[id]===v?' selected':'')+'>'+l+'</option>').join('')+'</select></label>');
  }
  if(swarmGuest){rows.push('<small>Swarm ships have only one opposing Gunstar. Each surviving ship fires automatically if it has a legal firing solution.</small>')}
