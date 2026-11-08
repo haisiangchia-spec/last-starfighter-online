@@ -37,8 +37,6 @@ test('local hot-seat requires separate sealed orders and advances after both pla
  await page.locator('#execute').click();
  await expect(page.locator('#status')).toContainText('KO-DAN');
  await page.locator('#execute').click();
- await expect(page.locator('#phase')).toHaveText('TARGETING',{timeout:30000});
- await page.locator('#execute').click();
  await expect(page.locator('#turn')).toHaveText('02',{timeout:30000});
 });
 test('local hot-seat keeps orders sealed and advances through three complete turns',async({page})=>{
@@ -61,8 +59,11 @@ test('local hot-seat keeps orders sealed and advances through three complete tur
  }
  expect(errors).toEqual([]);
 });
-test('local versus-computer duel resolves a complete turn',async({page})=>{
+test('local versus-computer duel resolves movement, targeting and firing',async({page})=>{
  await page.goto('/game.html?scenario=duel&mode=ai');
+ await page.locator('#execute').click();
+ await expect(page.locator('#phase')).toHaveText('TARGETING',{timeout:30000});
+ await expect(page.locator('#localTargetPanel')).toBeVisible();
  await page.locator('#execute').click();
  await expect(page.locator('#turn')).toHaveText('02',{timeout:30000});
 });
