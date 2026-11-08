@@ -397,7 +397,7 @@ test('online multiplayer forbids swarm while local AI can launch 1v14',()=>{
  const local=fs.readFileSync(path.join(__dirname,'../game.html'),'utf8');
  const rules=fs.readFileSync(path.join(__dirname,'../firestore.rules'),'utf8');
  assert.doesNotMatch(lobby,/<option value="swarm">/);
- assert.match(lobby,/game\.html\?scenario=swarm&mode=ai/);
+ assert.match(lobby,/local-battle\.html\?scenario=swarm/);
  assert.match(local,/launch\.get\('scenario'\)/);
  assert.match(rules,/request\.resource\.data\.scenario == 'duel'/);
  assert.match(source,/if\(r\.scenario==='swarm'\|\|hosts!==guests/);
