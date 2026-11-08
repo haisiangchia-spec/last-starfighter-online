@@ -681,3 +681,20 @@ test('Swarm lasers resolve before Gunstar weapons during online Swarm firing',()
  assert.ok(swarm>=0&&star>=0,'Both ships must attempt a shot');
  assert.ok(swarm<star,'Swarm fire must resolve before Gunstar fire');
 });
+
+test('damaging asteroid collision immediately destroys a Swarm Ship',()=>{
+ const initial=c.initialSwarm(false).fleet['SW-01'];
+ let collided=false;
+ for(let turn=1;turn<=40;turn++){
+  const ship=JSON.parse(JSON.stringify(initial)),events=[];
+  const rock=new Set([ship.q+','+ship.r]);
+  if(c.asteroidCollision(ship,rock,turn,'guest',0,3,events)){
+   collided=true;
+   assert.equal(ship.dead,true);
+   assert.equal(ship.hp,0);
+   assert.ok(events.some(line=>line.includes('SWARM SHIP DESTROYED BY ASTEROID COLLISION')));
+   break;
+  }
+ }
+ assert.ok(collided,'Expected a deterministic collision in 40 checked turns');
+});
