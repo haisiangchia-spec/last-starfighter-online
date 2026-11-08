@@ -550,3 +550,31 @@ test('declared firing target is locked even when another target is a better shot
  assert.equal(shots.length,1);
  assert.equal(shots[0].to.q,9);assert.equal(shots[0].to.r,7);
 });
+
+test('movement eliminates last 1v1 defender before targeting phase',()=>{
+ const state=c.initial(false),o=orders();
+ state.ships.guest.q=0;state.ships.guest.r=6;state.ships.guest.d=3;
+ o.guest.plan='F';
+ const after=c.apply(state,o,'move');
+ assert.equal(after.phase,'finished');
+ assert.equal(after.winner,'STAR LEAGUE');
+ assert.equal(after.turn,1);
+ assert.ok(after.log.some(x=>x.includes('BATTLE OVER DURING MOVEMENT')));
+});
+test('mutual off-map loss during movement ends in a draw without targeting',()=>{
+ const state=c.initial(false),o=orders();
+ state.ships.host.q=18;state.ships.host.r=6;state.ships.host.d=0;
+ state.ships.guest.q=0;state.ships.guest.r=6;state.ships.guest.d=3;
+ o.host.plan='F';o.guest.plan='F';
+ const after=c.apply(state,o,'move');
+ assert.equal(after.phase,'finished');
+ assert.equal(after.winner,'DRAW');
+});
+test('all killed pilots count as defeat in the 2v2 victory check',()=>{
+ const state=c.initialDoubles(false);
+ state.ships.guest.pilot=6;state.ships.guest2.pilot=6;
+ const o=Object.fromEntries(Object.keys(state.ships).map(slot=>[slot,{plan:'',fire:'none',arc:0}]));
+ const ended=c.apply(state,o,'move');
+ assert.equal(ended.phase,'finished');
+ assert.equal(ended.winner,'STAR LEAGUE');
+});
