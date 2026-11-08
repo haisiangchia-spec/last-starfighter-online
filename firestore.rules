@@ -61,8 +61,18 @@ service cloud.firestore {
            && resource.data.submitted[side()] == false
            && request.resource.data.submitted[side()] == true
            && request.resource.data.submitted.diff(resource.data.submitted).affectedKeys().hasOnly([side()]))
-          || (resource.data.submitted.host == true && resource.data.submitted.guest == true && (!('host2' in resource.data.submitted) || resource.data.submitted.host2 == true) && (!('guest2' in resource.data.submitted) || resource.data.submitted.guest2 == true)
-              && request.resource.data.turn == resource.data.turn + 1)
+          || (resource.data.phase == 'orders'
+              && resource.data.submitted.host == true && resource.data.submitted.guest == true
+              && (!('host2' in resource.data.submitted) || resource.data.submitted.host2 == true)
+              && (!('guest2' in resource.data.submitted) || resource.data.submitted.guest2 == true)
+              && request.resource.data.phase == 'targeting'
+              && request.resource.data.turn == resource.data.turn)
+          || (resource.data.phase == 'targeting'
+              && resource.data.submitted.host == true && resource.data.submitted.guest == true
+              && (!('host2' in resource.data.submitted) || resource.data.submitted.host2 == true)
+              && (!('guest2' in resource.data.submitted) || resource.data.submitted.guest2 == true)
+              && request.resource.data.turn == resource.data.turn + 1
+              && request.resource.data.phase in ['orders','finished'])
           || (host() && request.resource.data.phase == 'ended' && resource.data.phase != 'ended' && request.resource.data.turn == resource.data.turn)
           || (host() && resource.data.phase == 'ended' && request.resource.data.phase == 'orders' && request.resource.data.turn == 1)
         );
@@ -73,17 +83,36 @@ service cloud.firestore {
         function side() { return roomData().hostUid == request.auth.uid ? 'host' : roomData().guestUid == request.auth.uid ? 'guest' : roomData().host2Uid == request.auth.uid ? 'host2' : 'guest2'; }
         function member() { return request.auth != null && (roomData().hostUid == request.auth.uid || roomData().guestUid == request.auth.uid || roomData().host2Uid == request.auth.uid || roomData().guest2Uid == request.auth.uid); }
         function battle() { return get(/databases/$(database)/documents/rooms/$(roomId)/combat/state).data; }
-        allow get: if member() && (orderId == (battle().matchId + '_' + string(battle().turn) + '_' + side()) || (battle().submitted.host == true && battle().submitted.guest == true && (!('host2' in battle().submitted) || battle().submitted.host2 == true) && (!('guest2' in battle().submitted) || battle().submitted.guest2 == true)));
+        function allSealed() {
+          return battle().submitted.host == true && battle().submitted.guest == true
+            && (!('host2' in battle().submitted) || battle().submitted.host2 == true)
+            && (!('guest2' in battle().submitted) || battle().submitted.guest2 == true);
+        }
+        function idFor(slot) { return battle().matchId + '_' + string(battle().turn) + '_' + slot; }
+        allow get: if member() && (
+          orderId == idFor(side()) ||
+          orderId == idFor(side()) + '_target' ||
+          allSealed());
         allow list: if false;
-        allow create: if member() && orderId == (battle().matchId + '_' + string(battle().turn) + '_' + side())
+        allow create: if member()
           && battle().submitted[side()] == false
           && request.resource.data.owner == request.auth.uid
           && request.resource.data.turn == battle().turn
-          && (!('target' in request.resource.data) || request.resource.data.target in ['host','guest','host2','guest2',''])
-          && request.resource.data.plan is string
-          && request.resource.data.plan.matches('[FLR]{0,5}')
           && request.resource.data.fire in ['laser','particle','missile','guard','none','laser+particle','laser+missile','particle+missile','laser+particle+missile']
-          && request.resource.data.arc in [0,1,3,5];
+          && (
+            (battle().phase == 'orders'
+              && orderId == idFor(side())
+              && (!('target' in request.resource.data) || request.resource.data.target in ['host','guest','host2','guest2',''])
+              && request.resource.data.plan is string
+              && request.resource.data.plan.matches('[FLR]{0,5}')
+              && request.resource.data.arc in [0,1,3,5]
+              && (!('portLaserArc' in request.resource.data) || request.resource.data.portLaserArc in [0,5])
+              && (!('starboardLaserArc' in request.resource.data) || request.resource.data.starboardLaserArc in [0,1]))
+            || (battle().phase == 'targeting'
+              && orderId == idFor(side()) + '_target'
+              && request.resource.data.targets is map
+              && request.resource.data.targets.keys().hasOnly(['laser1','laser2','laser3','particle1','missile1']))
+          );
         allow update, delete: if false;
       }
     }
