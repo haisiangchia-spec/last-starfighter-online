@@ -104,6 +104,15 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
     await page.locator('#submit').click();
     await expect(page.locator('#status')).not.toContainText('ORDER REJECTED',{timeout:15000});
    }
+   if(round===2){
+    // Reconnect after movement but before target declaration. The synchronized
+    // board must remain in targeting, with legal default targets regenerated.
+    const reconnecting=pilots[pilots.length-1].page;
+    await reconnecting.reload();
+    await expect(reconnecting.locator('#targetingPanel')).toBeVisible({timeout:30000});
+    await expect(reconnecting.locator('#turn')).toHaveText(String(round));
+    await expect(reconnecting.locator('#submit')).toHaveText('LOCK WEAPON TARGETS');
+   }
    for(const {page} of pilots){
     await expect(page.locator('#targetingPanel')).toBeVisible({timeout:30000});
     await expect(page.locator('#turn')).toHaveText(String(round));
@@ -126,9 +135,18 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
      expect(await assignments.count()).toBeGreaterThanOrEqual(1);
     }
    }
-   for(const {page} of pilots){
+   for(let i=0;i<pilots.length;i++){
+    const page=pilots[i].page;
     await page.locator('#submit').click();
     await expect(page.locator('#status')).not.toContainText('ORDER REJECTED',{timeout:15000});
+    if(round===3&&i===0){
+     // Reload a pilot who has already committed. Duplicate target submissions
+     // must remain disabled until the remaining pilots finish this phase.
+     await expect(page.locator('#submit')).toBeDisabled({timeout:30000});
+     await page.reload();
+     await expect(page.locator('#targetingPanel')).toBeVisible({timeout:30000});
+     await expect(page.locator('#submit')).toBeDisabled();
+    }
    }
    for(const {page} of pilots){
     await expect(page.locator('#turn')).toHaveText(String(round+1),{timeout:30000});
