@@ -12,7 +12,7 @@ assert.ok(start>=0&&end>start,'Combat engine source boundaries changed');
 const engine=source.slice(start,end);
 const sandbox={structuredClone,console};
 vm.createContext(sandbox);
-vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget};',sandbox,{filename:'online-battle.js'});
+vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget,prepareTemporaryOnline,endTurnDamageOnline};',sandbox,{filename:'online-battle.js'});
 const c=sandbox.combat;
 const orders=(host={plan:'',fire:'none'},guest={plan:'',fire:'none'})=>({host,guest});
 function scenario(){const s=c.initial(false);s.log=[];return s}
@@ -732,4 +732,56 @@ test('live multiplayer resolution errors remain visible and do not spin the reso
  assert.match(source,/!resolutionError&&autoAttemptTurn!==phaseKey/);
  assert.match(source,/catch\(e\)\{resolutionError=e\?\.message\|\|String\(e\)/);
  assert.match(source,/\$\('resolve'\)\.onclick=\(\)=>\{resolutionError='';resolveTurn\(\)\}/);
+});
+
+test('milestone 2: 1v1 and 2v2 share temporary status lifecycle and speed conflict precedence',()=>{
+ const ships=[c.initial(false).ships.host,c.initialDoubles(false).ships.host2];
+ for(const [i,ship] of ships.entries()){
+  ship.lastMove=4;ship.nextConstant=1;ship.nextHalf=1;ship.nextRestrict=1;ship.nextStabilizer=1;
+  const events=[];
+  c.endTurnDamageOnline(ship,1,i?'host2':'host',events);
+  assert.equal(ship.stabilizer,1);
+  assert.equal(ship.restrict,null,'Stabilizer overrides simultaneous steering restriction');
+  assert.equal(ship.constant,null,'Speed lock is postponed');
+  assert.equal(ship.half,1);
+  assert.equal(ship.deferredSpeedTurns,1);
+  assert.equal(ship.deferredSpeedTarget,4);
+  c.endTurnDamageOnline(ship,2,i?'host2':'host',events);
+  assert.equal(ship.half,1);
+  assert.equal(ship.deferredSpeedTurns,0);
+  assert.equal(ship.constant,null,'Second restricted turn must finish before speed lock');
+  c.endTurnDamageOnline(ship,3,i?'host2':'host',events);
+  assert.equal(ship.half,0);
+  assert.equal(ship.constant,4,'Original pre-conflict speed must be restored');
+  assert.ok(events.some(line=>line.includes('SPEED CONFLICT')));
+ }
+});
+test('milestone 2: pilot and gunner injury recovery transitions apply to both federation ships',()=>{
+ for(const slot of ['host','host2']){
+  const ship=slot==='host'?c.initial(false).ships.host:c.initialDoubles(false).ships.host2;
+  ship.pilot=3;ship.unconsciousPilot=2;
+  ship.gunner=4;ship.unconsciousGunner=2;
+  const events=[];
+  c.endTurnDamageOnline(ship,4,slot,events);
+  assert.equal(ship.unconsciousPilot,1,'Pilot remains unconscious for next game turn');
+  assert.equal(ship.unconsciousGunner,1,'Gunner remains unconscious for next game turn');
+  c.endTurnDamageOnline(ship,5,slot,events);
+  assert.ok([0,1].includes(ship.unconsciousPilot));
+  assert.ok([0,1].includes(ship.unconsciousGunner));
+  assert.ok(events.some(line=>line.includes('PILOT')));
+  assert.ok(events.some(line=>line.includes('GUNNER')));
+ }
+});
+test('milestone 2: life-support expiry kills pilot without silently destroying the craft',()=>{
+ for(const slot of ['host','guest','host2','guest2']){
+  const state=slot.endsWith('2')?c.initialDoubles(false):c.initial(false);
+  const ship=state.ships[slot];
+  ship.life=1;ship.lastMove=2;
+  const events=[];c.endTurnDamageOnline(ship,3,slot,events);
+  assert.equal(ship.life,0);
+  assert.equal(ship.pilot,6);
+  assert.equal(ship.killedSpeed,2);
+  assert.equal(ship.dead,false);
+  assert.ok(events.some(line=>line.includes('LIFE SUPPORT EXPIRED')));
+ }
 });
