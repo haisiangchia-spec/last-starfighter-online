@@ -466,8 +466,15 @@ function applySwarm(s,orders,stage='full'){
  // Apply damage only after every vessel has completed its firing opportunity.
  for(const [id,kinds] of Object.entries(hits)){
   const ship=id==='host'?gun:out.fleet[id],side=id==='host'?'host':'guest';
-  if(!ship)continue;
-  for(let i=0;i<kinds.length&&!ship.dead;i++)damageShip(ship,kinds[i],s.turn*97+i*37+(id==='host'?0:Number(id.slice(3))*113),side,events);
+  if(!ship||!kinds.length)continue;
+  // FASA Swarm Ship rule: any successful hit destroys it outright.
+  // Damage to the Gunstar still uses the normal damage tables.
+  if(id!=='host'){
+   ship.dead=true;ship.hp=0;
+   events.push(id+' DESTROYED — SWARM SHIP ELIMINATED BY ONE HIT');
+   continue;
+  }
+  for(let i=0;i<kinds.length&&!ship.dead;i++)damageShip(ship,kinds[i],s.turn*97+i*37,side,events);
  }
  for(const [id,ship] of [['GS-01',gun],...Object.entries(out.fleet)]){
   if(ship.dead)continue;
