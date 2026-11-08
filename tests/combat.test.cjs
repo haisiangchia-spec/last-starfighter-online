@@ -1079,3 +1079,36 @@ test('Local setup uses the same randomized small asteroid count and two large cl
  assert.match(local,/if\(asteroids==='field'\)placeAsteroidCounters\(\)/);
  assert.doesNotMatch(local,/placeAsteroidCounters\(12\)/);
 });
+
+test('FASA Swarm Death Blossom rotates six facings then requires a mandatory recharge turn',()=>{
+ const base=c.initialSwarm(false);
+ base.ships.host.q=8;base.ships.host.r=6;base.ships.host.d=0;
+ base.ships.host.power=6;
+ for(const [id,ship] of Object.entries(base.fleet)){
+  ship.q=12;ship.r=6;ship.d=0;
+  if(id!=='SW-01')ship.dead=true;
+ }
+ const orders={host:{plan:'',fire:'blossom',blossomMissiles:[false,false,false,false,false,false]},guest:{plan:'',fire:'none',fleetPlans:{}}};
+ const fired=c.apply(base,orders,'fire');
+ assert.ok(fired.log.some(x=>x.includes('DEATH BLOSSOM ROTATION 1/6')));
+ assert.equal(fired.log.filter(x=>x.includes('DEATH BLOSSOM ROTATION')).length,6);
+ assert.equal(fired.ships.host.d,0);
+ assert.equal(fired.ships.host.power,0);
+ assert.equal(fired.ships.host.blossomRecharge,true);
+ assert.equal(fired.ships.host.missiles,4);
+ const moved=c.apply(fired,{host:{plan:'FFFF',fire:'laser'},guest:{plan:'',fire:'none',fleetPlans:{}}},'move');
+ assert.equal(moved.ships.host.q,8,'Mandatory recovery prevents movement despite illegal queued vectors');
+ const recovered=c.apply(moved,{host:{plan:'FFFF',fire:'laser'},guest:{plan:'',fire:'none',fleetPlans:{}}},'fire');
+ assert.equal(recovered.ships.host.power,5);
+ assert.equal(recovered.ships.host.blossomRecharge,false);
+ assert.ok(!recovered.lastVolley.shots.some(x=>x.side==='host'),'No firing during recovery');
+});
+test('FASA Swarm Death Blossom rejects insufficient auxiliary power',()=>{
+ for(const power of [0,1,3,11]){
+  const s=c.initialSwarm(false);s.ships.host.power=power;
+  const result=c.apply(s,{host:{plan:'',fire:'blossom'},guest:{plan:'',fire:'none',fleetPlans:{}}},'fire');
+  assert.ok(result.log.some(x=>x.includes('DEATH BLOSSOM UNAVAILABLE')));
+  assert.ok(!result.ships.host.blossomRecharge);
+  assert.ok(!result.lastVolley.shots.some(x=>x.side==='host'));
+ }
+});
