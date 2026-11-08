@@ -637,3 +637,22 @@ test('Swarm laser uses printed stationary-target bonus',()=>{
  // Base 4 + zero range increment -1 for a stationary Gunstar = 3.
  assert.match(line,/VS 3 /);
 });
+
+test('Swarm craft are explicitly limited to three movement hexes',()=>{
+ const s=c.initialSwarm(false);
+ assert.equal(s.fleet['SW-01'].type,'swarm');
+ assert.equal(s.fleet['SW-01'].q,10);
+ const moves={host:{plan:'',fire:'none'},guest:{plan:'',fire:'none',fleetPlans:{'SW-01':'FFF'}}};
+ const out=c.apply(s,moves,'move');
+ assert.equal(out.fleet['SW-01'].q,13);
+ assert.equal(out.fleet['SW-01'].lastMove,3);
+});
+test('Swarm craft cannot plot four moves while the Gunstar can',()=>{
+ const s=c.initialSwarm(false);
+ const moves={host:{plan:'FFFF',fire:'none'},guest:{plan:'',fire:'none',fleetPlans:{'SW-01':'FFFF'}}};
+ const out=c.apply(s,moves,'move');
+ assert.equal(out.ships.host.q,9);
+ assert.equal(out.fleet['SW-01'].q,10);
+ assert.equal(out.fleet['SW-01'].lastMove,0);
+ assert.ok(out.log.some(line=>line.includes('SW-01 INVALID VECTOR')));
+});
