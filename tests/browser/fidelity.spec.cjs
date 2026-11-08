@@ -1,11 +1,39 @@
 const {test,expect}=require('@playwright/test');
 const url='/index.html?emulator=1';
+let pilotSequence=0;
 async function openPilot(browser){
  const context=await browser.newContext();const page=await context.newPage();
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto(url);await expect(page.locator('#authStatus')).toContainText('CONNECTED',{timeout:30000});
+ await page.locator('#pilotName').fill('TEST PILOT '+(++pilotSequence));
  return {context,page,errors};
 }
+
+test('lobby requires a name, randomizes initial faction and seed, and defaults asteroids on',async({browser})=>{
+ const pilot=await openPilot(browser);
+ try{
+  const page=pilot.page;
+  await page.locator('#pilotName').fill('');
+  await page.locator('#create').click();
+  await expect(page.locator('#notice')).toContainText('Enter your pilot name');
+  await expect(page.locator('#roomPanel')).toBeHidden();
+  await page.locator('#pilotName').fill('Commander Vega');
+  await page.locator('#create').click();
+  await expect(page.locator('#roomPanel')).toBeVisible();
+  await expect(page.locator('#side')).toContainText('Commander Vega');
+  await expect(page.locator('#lobbyAsteroids')).toBeChecked();
+  await expect(page.locator('#asteroidPreview')).toHaveCount(0);
+  await expect(page.locator('#joinFaction')).toHaveCount(0);
+  const seed=Number(await page.locator('#seedStatus').textContent());
+  expect(Number.isInteger(seed)&&seed>=1&&seed<=4294967295).toBe(true);
+  // An independently generated room gets a new random seed, not a fixed default.
+  await page.locator('#create').click();
+  await expect(page.locator('#roomPanel')).toBeVisible();
+  const second=Number(await page.locator('#seedStatus').textContent());
+  expect(second).not.toBe(seed);
+  expect(pilot.errors).toEqual([]);
+ }finally{await pilot.context.close()}
+});
 test('local AI duel, clear-space Swarm, asteroid Swarm and hot-seat render without exceptions',async({page})=>{
  const errors=[];page.on('pageerror',e=>errors.push(e.message));
  for(const [scenario,mode,asteroids,count,facing] of [
@@ -77,11 +105,11 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
   expect(code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
   for(let i=1;i<pilots.length;i++){
    const p=pilots[i].page;
-   await p.locator('#joinFaction').selectOption(i<size?'host':'guest');
    await p.locator('#codeInput').fill(code);await p.locator('#join').click();
    await expect(p.locator('#roomPanel')).toBeVisible();
   }
-  await host.locator('#lobbyAsteroids').check();
+  await expect(host.locator('#lobbyAsteroids')).toBeChecked();
+  await expect(host.locator('#asteroidPreview')).toHaveCount(0);
   await host.locator('#battleSeed').fill('43112');
   await host.locator('#battleSeed').dispatchEvent('change');
   await expect(host.locator('#seedStatus')).toHaveText('43112');
@@ -247,11 +275,14 @@ for(const size of [1,2])test('release gate: real '+size+'v'+size+' completes fro
   expect(room).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
   for(let i=1;i<pilots.length;i++){
    const page=pilots[i].page;
-   await page.locator('#joinFaction').selectOption(i<size?'host':'guest');
    await page.locator('#codeInput').fill(room);
    await page.locator('#join').click();
    await expect(page.locator('#roomPanel')).toBeVisible();
   }
+  // The room creator owns configuration even if assigned to Ko-Dan.
+  const factions=await Promise.all(pilots.map(async({page})=>(await page.locator('#side').textContent()).includes('STAR LEAGUE')?'host':'guest'));
+  expect(factions.filter(x=>x==='host')).toHaveLength(size);
+  expect(factions.filter(x=>x==='guest')).toHaveLength(size);
   // Use a clear starfield so off-map victory is deterministic and requires no test-only state mutation.
   await host.locator('#lobbyAsteroids').uncheck();
   for(const {page} of pilots)await page.locator('#ready').click();
@@ -268,7 +299,7 @@ for(const size of [1,2])test('release gate: real '+size+'v'+size+' completes fro
     await expect(page.locator('#turn')).toHaveText(String(round));
     for(const kind of ['laser','particle','missile'])await page.locator('#'+kind).uncheck();
     // Deck Fighters move west toward and eventually off the left edge; Gunstar ships hold.
-    await page.locator('#plan').fill(i<size?'':round===4?'FF':'FFFFF');
+    await page.locator('#plan').fill(factions[i]==='host'?'':round===4?'FF':'FFFFF');
     await page.locator('#submit').click();
     await expect(page.locator('#status')).not.toContainText('ORDER REJECTED');
    }
@@ -283,7 +314,7 @@ for(const size of [1,2])test('release gate: real '+size+'v'+size+' completes fro
     for(let i=0;i<pilots.length;i++){
      const page=pilots[i].page;
      await expect(page.locator('#battleResult')).toBeVisible({timeout:30000});
-     await expect(page.locator('#resultTitle')).toContainText(i<size?'VICTORY · STAR LEAGUE':'DEFEAT · STAR LEAGUE');
+     await expect(page.locator('#resultTitle')).toContainText(factions[i]==='host'?'VICTORY · STAR LEAGUE':'DEFEAT · STAR LEAGUE');
      await expect(page.locator('#targetingPanel')).toBeHidden();
      await expect(page.locator('#submit')).toBeDisabled();
     }
