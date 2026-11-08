@@ -27,16 +27,47 @@ function facingToTarget(a,b){
 }
 function inArc(a,b){const t=facingToTarget(a,b);return ((t-a.d+6)%6)<=1||((a.d-t+6)%6)<=1}
 
-// Match local game.html: 22 seeded placement attempts in columns 5–13.
-// Duplicates collapse to unique asteroid hexes; default local replay seed is 1984.
-function generateAsteroidField(seed=1984,occupied=[]){
+// FASA 1984 p.19: two seven-hex counters plus 34 available single-hex
+// counters. The number and positions are player-chosen in the boardgame.
+// Until manual setup exists, use a reproducible 12-counter preset (2+10).
+// Each seven-hex counter is a central hex surrounded by its six neighbours.
+const LARGE_ASTEROID_OFFSETS=[[0,0],...dirs];
+function generateAsteroidField(seed=1984,occupied=[],counterCount=12){
  let rng=(Number(seed)>>>0)||1;
  const random=()=>{rng=(Math.imul(1664525,rng)+1013904223)>>>0;return rng/4294967296};
- const blocked=new Set(occupied.map(p=>typeof p==='string'?p:p.q+','+p.r)),rocks=new Set();
- for(let i=0;i<22;i++){const q=5+Math.floor(random()*9),r=Math.floor(random()*13),key=q+','+r;if(!blocked.has(key))rocks.add(key)}
- return [...rocks];
+ const ships=occupied.map(p=>typeof p==='string'?{q:Number(p.split(',')[0]),r:Number(p.split(',')[1])}:p);
+ const nearShip=(q,r)=>ships.some(p=>distance({q,r},p)<=1);
+ const rocks=new Set(),counters=[];
+ const total=Math.max(2,Math.min(36,Math.trunc(Number(counterCount)||12)));
+ // A fixed candidate catalogue, shuffled using the selected match seed.
+ const candidates=[];
+ for(let q=6;q<=12;q++)for(let r=2;r<=10;r++)candidates.push({q,r});
+ for(let i=candidates.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[candidates[i],candidates[j]]=[candidates[j],candidates[i]]}
+ for(const center of candidates){
+  if(counters.length>=2)break;
+  const hexes=LARGE_ASTEROID_OFFSETS.map(([dq,dr])=>[center.q+dq,center.r+dr]);
+  if(hexes.some(([q,r])=>q<0||q>=NQ||r<0||r>=NR||nearShip(q,r)||rocks.has(q+','+r)))continue;
+  const ids=hexes.map(([q,r])=>q+','+r);
+  ids.forEach(x=>rocks.add(x));
+  counters.push({type:'large',hexes:ids});
+ }
+ if(counters.length!==2)throw Error('No room for two legal seven-hex asteroid counters');
+ const singles=[];
+ for(let q=5;q<=13;q++)for(let r=0;r<NR;r++)singles.push({q,r});
+ for(let i=singles.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[singles[i],singles[j]]=[singles[j],singles[i]]}
+ for(const p of singles){
+  if(counters.length>=total)break;
+  const id=p.q+','+p.r;
+  if(rocks.has(id)||nearShip(p.q,p.r))continue;
+  rocks.add(id);counters.push({type:'small',hexes:[id]});
+ }
+ if(counters.length!==total)throw Error('Cannot place requested number of asteroid counters');
+ return {hexes:[...rocks],counters};
 }
-const asteroidHexes=generateAsteroidField(1984);const rockKey=(q,r)=>q+','+r;const rockCoords=p=>typeof p==='string'?p.split(',').map(Number):Array.isArray(p)?p:[p.q,p.r];const rocksFor=s=>new Set((s?.asteroids||[]).map(p=>{const [q,r]=rockCoords(p);return rockKey(q,r)}));
+function asteroidField(seed=1984,occupied=[],counterCount=12){
+ return generateAsteroidField(seed,occupied,counterCount).hexes;
+}
+const asteroidHexes=asteroidField(1984);const rockKey=(q,r)=>q+','+r;const rockCoords=p=>typeof p==='string'?p.split(',').map(Number):Array.isArray(p)?p:[p.q,p.r];const rocksFor=s=>new Set((s?.asteroids||[]).map(p=>{const [q,r]=rockCoords(p);return rockKey(q,r)}));
 function hexLine(a,b){const n=distance(a,b),line=[];for(let i=1;i<n;i++){
  const t=i/n,x=a.q+(b.q-a.q)*t,z=a.r+(b.r-a.r)*t,y=-x-z;
  const rx0=Math.round(x+1e-7),ry0=Math.round(y+1e-7),rz0=Math.round(z-2e-7);
@@ -82,7 +113,7 @@ function missileBlast(out,rocks,target,hits,events,source){
  }
 }
 function firingBlocked(a,b,rocks){return blocked(a,b,rocks)||(rocks.has(rockKey(a.q,a.r))&&rocks.has(rockKey(b.q,b.r)))}
-const initial=(asteroids=false,seed=1984)=>({scenario:'duel',seed,asteroids:asteroids?generateAsteroidField(seed,[{q:2,r:6},{q:16,r:6}]):[],turn:1,ships:{host:{q:2,r:6,d:0,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false},guest:{q:16,r:6,d:3,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false}},submitted:{host:false,guest:false},phase:'orders',log:['Skirmish initiated. Both pilots must submit orders.'],winner:null});
+const initial=(asteroids=false,seed=1984)=>({scenario:'duel',seed,asteroids:asteroids?asteroidField(seed,[{q:2,r:6},{q:16,r:6}]):[],turn:1,ships:{host:{q:2,r:6,d:0,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false},guest:{q:16,r:6,d:3,hp:20,power:20,missiles:4,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:false,missileLost:false,dead:false}},submitted:{host:false,guest:false},phase:'orders',log:['Skirmish initiated. Both pilots must submit orders.'],winner:null});
 
 // Swarm mode keeps a single Gunstar under host control and fourteen individual
 // Ko-Dan contacts under guest control. Each contact has its own sealed vector.
@@ -104,7 +135,7 @@ function initialSwarm(asteroids=false,seed=1984){
  s.ships.guest={...s.fleet['SW-01']};
  if(asteroids){
   const occupied=[s.ships.host,...Object.values(s.fleet)];
-  s.asteroids=generateAsteroidField(seed,occupied);
+  s.asteroids=asteroidField(seed,occupied);
  }
  s.log=['SWARM MISSION: Gunstar versus fourteen Ko-Dan contacts. Guest plots each surviving fighter.'];
  return s;
