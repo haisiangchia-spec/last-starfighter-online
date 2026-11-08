@@ -3,7 +3,8 @@ import {initial,initialSwarm,apply,predict,moveLimit,turnLimit,weaponTargets,wea
 const $=id=>document.getElementById(id);
 const params=new URLSearchParams(location.search);
 let scenario=params.get('scenario')==='swarm'?'swarm':'duel';
-let asteroids=params.get('asteroids')!=='off',seed=Number(params.get('seed'))||1984;
+const randomSeed=()=>{if(typeof crypto!=='undefined'&&crypto.getRandomValues){const a=new Uint32Array(1);crypto.getRandomValues(a);return a[0]||1}return 1+Math.floor(Math.random()*4294967294)};
+let asteroids=params.get('asteroids')!=='off',seed=Number(params.get('seed'))||randomSeed();
 let state, movementOrders=null, targetDraft={}, zoom=1, showArcs=true;
 let blossomMode=false,blossomArcs=Array(6).fill(0),blossomMissiles=Array(6).fill(false),blossomTargets=Array.from({length:6},()=>({}));
 const face=['EAST','SOUTHEAST','SOUTHWEST','WEST','NORTHWEST','NORTHEAST'];
@@ -235,12 +236,13 @@ $('map').onclick=e=>{
 };
 $('closeInspect').onclick=()=>$('inspectDialog').close();
 $('submit').onclick=()=>state?.phase==='orders'?beginTargeting():commitFiring();
-$('newLocalMission').onclick=start;$('reset').onclick=start;
+$('newLocalMission').onclick=start;$('randomLocalMission').onclick=()=>{$('localSeed').value=String(randomSeed());start()};$('reset').onclick=start;
 $('addF').onclick=()=>add('F');$('addL').onclick=()=>add('L');$('addR').onclick=()=>add('R');
 function add(x){const val=$('plan').value+x;try{predict(player(),val);$('plan').value=val;render()}catch(e){message(e.message)}}
 $('undoPlan').onclick=()=>{$('plan').value=$('plan').value.slice(0,-1);render()};
 $('clearPlan').onclick=()=>{$('plan').value='';render()};
 $('plan').addEventListener('input',render);
+$('arc').addEventListener('change',render);
 $('recharge').onclick=()=>{$('recharge').dataset.queued=$('recharge').dataset.queued==='true'?'false':'true';message($('recharge').dataset.queued==='true'?'RECHARGE QUEUED · HOLD FIRE':'RECHARGE CANCELLED')};
 $('blossom').onclick=fireBlossom;
 $('zoomIn').onclick=()=>{zoom=Math.min(1.6,zoom+.15);draw()};
