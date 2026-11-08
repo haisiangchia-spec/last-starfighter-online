@@ -396,3 +396,38 @@ test('local Swarm follows rulebook: no-asteroid ships face away; asteroid ships 
  assert.match(local,/16\+2\*wave,r,3\)/);
  assert.doesNotMatch(local,/10\+2\*wave,r,3\)/);
 });
+
+test('three successive no-fire 1v1 turns preserve ship health and reset sealed flags',()=>{
+ let state=c.initial(false);
+ const start=JSON.parse(JSON.stringify(state.ships));
+ for(let turn=1;turn<=3;turn++){
+  state=c.apply(state,orders());
+  assert.equal(state.turn,turn+1);
+  assert.equal(state.phase,'orders');
+  assert.equal(state.winner,null);
+  assert.ok(Object.values(state.submitted).every(v=>v===false));
+  for(const side of ['host','guest']){
+   assert.equal(state.ships[side].hull,start[side].hull);
+   assert.equal(state.ships[side].power,start[side].power);
+   assert.equal(state.ships[side].dead,false);
+  }
+ }
+});
+test('three successive no-fire 2v2 turns preserve all four ships and independent slots',()=>{
+ let state=c.initialDoubles(false);
+ const start=JSON.parse(JSON.stringify(state.ships));
+ const o=Object.fromEntries(Object.keys(state.ships).map(slot=>[slot,{plan:'',fire:'none',target:''}]));
+ for(let turn=1;turn<=3;turn++){
+  state=c.apply(state,o);
+  assert.equal(state.turn,turn+1);
+  assert.equal(state.phase,'orders');
+  assert.equal(state.winner,null);
+  assert.equal(Object.keys(state.submitted).length,4);
+  assert.ok(Object.values(state.submitted).every(v=>v===false));
+  for(const slot of Object.keys(start)){
+   assert.equal(state.ships[slot].hull,start[slot].hull);
+   assert.equal(state.ships[slot].power,start[slot].power);
+   assert.equal(state.ships[slot].dead,false);
+  }
+ }
+});
