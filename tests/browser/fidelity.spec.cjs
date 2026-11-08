@@ -100,6 +100,7 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
   async function playRound(round){
    for(const {page} of pilots){
     await expect(page.locator('#submit')).toHaveText('COMMIT MOVEMENT',{timeout:30000});
+    await expect(page.locator('#laser')).toBeEnabled();
     await page.locator('#submit').click();
     await expect(page.locator('#status')).not.toContainText('ORDER REJECTED',{timeout:15000});
    }
@@ -107,6 +108,18 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
     await expect(page.locator('#targetingPanel')).toBeVisible({timeout:30000});
     await expect(page.locator('#turn')).toHaveText(String(round));
     await expect(page.locator('#submit')).toHaveText('LOCK WEAPON TARGETS');
+    const assignments=page.locator('select.target-assignment');
+    if(await assignments.count()){
+     const options=await assignments.first().locator('option').evaluateAll(nodes=>nodes.map(n=>n.value));
+     const selected=await assignments.first().inputValue();
+     // A valid firing solution is preselected rather than HOLD FIRE.
+     expect(selected).toBe(options.length>1?options[1]:'none');
+     // Even a preselected target may be overridden to hold fire.
+     if(round===1){
+      await assignments.first().selectOption('none');
+      await expect(assignments.first()).toHaveValue('none');
+     }
+    }
     // Targets must be independently selectable for each weapon.
     if(size===2){
      const assignments=page.locator('select.target-assignment');
