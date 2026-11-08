@@ -27,18 +27,18 @@ function facingToTarget(a,b){
 }
 function inArc(a,b){const t=facingToTarget(a,b);return ((t-a.d+6)%6)<=1||((a.d-t+6)%6)<=1}
 
-// FASA 1984 p.19: two seven-hex counters plus 34 available single-hex
-// counters. The number and positions are player-chosen in the boardgame.
-// Until manual setup exists, use a reproducible 12-counter preset (2+10).
-// Each seven-hex counter is a central hex surrounded by its six neighbours.
+// House-rule exception to FASA 1984 p.19: no manual placement.
+// Every asteroid-enabled match has exactly two seven-hex counters and
+// a seeded random number (10–20 inclusive) of single-hex counters.
+// The seed determines both the count and layout for multiplayer replay.
 const LARGE_ASTEROID_OFFSETS=[[0,0],...dirs];
-function generateAsteroidField(seed=1984,occupied=[],counterCount=12){
+function generateAsteroidField(seed=1984,occupied=[]){
  let rng=(Number(seed)>>>0)||1;
  const random=()=>{rng=(Math.imul(1664525,rng)+1013904223)>>>0;return rng/4294967296};
  const ships=occupied.map(p=>typeof p==='string'?{q:Number(p.split(',')[0]),r:Number(p.split(',')[1])}:p);
  const nearShip=(q,r)=>ships.some(p=>distance({q,r},p)<=1);
  const rocks=new Set(),counters=[];
- const total=Math.max(2,Math.min(36,Math.trunc(Number(counterCount)||12)));
+ const total=2+Math.floor(random()*11)+10;
  // A fixed candidate catalogue, shuffled using the selected match seed.
  const candidates=[];
  for(let q=6;q<=12;q++)for(let r=2;r<=10;r++)candidates.push({q,r});
@@ -64,8 +64,8 @@ function generateAsteroidField(seed=1984,occupied=[],counterCount=12){
  if(counters.length!==total)throw Error('Cannot place requested number of asteroid counters');
  return {hexes:[...rocks],counters};
 }
-function asteroidField(seed=1984,occupied=[],counterCount=12){
- return generateAsteroidField(seed,occupied,counterCount).hexes;
+function asteroidField(seed=1984,occupied=[]){
+ return generateAsteroidField(seed,occupied).hexes;
 }
 const asteroidHexes=asteroidField(1984);const rockKey=(q,r)=>q+','+r;const rockCoords=p=>typeof p==='string'?p.split(',').map(Number):Array.isArray(p)?p:[p.q,p.r];const rocksFor=s=>new Set((s?.asteroids||[]).map(p=>{const [q,r]=rockCoords(p);return rockKey(q,r)}));
 function hexLine(a,b){const n=distance(a,b),line=[];for(let i=1;i<n;i++){
