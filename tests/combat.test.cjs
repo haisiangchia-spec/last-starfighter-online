@@ -12,7 +12,7 @@ assert.ok(start>=0&&end>start,'Combat engine source boundaries changed');
 const engine=source.slice(start,end);
 const sandbox={structuredClone,console};
 vm.createContext(sandbox);
-vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget,prepareTemporaryOnline,endTurnDamageOnline,predict,moveLimit,turnLimit,fireControlCrewReason,usableWeaponKinds,weaponTargets,availableAsteroidTargets,parseAsteroidTarget};',sandbox,{filename:'online-battle.js'});
+vm.runInContext(engine+'\nthis.combat={initial,initialDoubles,initialSwarm,apply,applyDoubles,asteroidCollision,missileBlast,rocksFor,damageShip,roll,damageRows,crewThreshold,crewInjuryCheck,recoverCrewOnline,hexLine,firingBlocked,facingToTarget,weaponTargets,declaredTarget,prepareTemporaryOnline,endTurnDamageOnline,predict,moveLimit,turnLimit,fireControlCrewReason,usableWeaponKinds,weaponTargets,availableAsteroidTargets,parseAsteroidTarget,generateAsteroidField};',sandbox,{filename:'online-battle.js'});
 const c=sandbox.combat;
 const orders=(host={plan:'',fire:'none'},guest={plan:'',fire:'none'})=>({host,guest});
 function scenario(){const s=c.initial(false);s.log=[];return s}
@@ -1019,4 +1019,52 @@ test('FASA p19: Gunstar can deliberately clear an empty asteroid hex in Swarm en
   }
  }
  assert.ok(cleared,'Swarm engine resolves hit and removes an empty asteroid hex');
+});
+
+test('House rule: every seeded asteroid field has 2 large clusters and 10-20 small asteroids',()=>{
+ const seenCounts=new Set();
+ for(let seed=1;seed<=120;seed++){
+  const layout=c.generateAsteroidField(seed,[{q:2,r:6},{q:16,r:6}]);
+  const large=layout.counters.filter(x=>x.type==='large');
+  const small=layout.counters.filter(x=>x.type==='small');
+  assert.equal(large.length,2);
+  assert.ok(small.length>=10&&small.length<=20,'Small asteroid count '+small.length+' outside 10-20');
+  seenCounts.add(small.length);
+  assert.equal(layout.hexes.length,14+small.length);
+  assert.equal(new Set(layout.hexes).size,layout.hexes.length,'Asteroid hexes overlap');
+  assert.deepEqual(layout,c.generateAsteroidField(seed,[{q:2,r:6},{q:16,r:6}]),'Same seed must reproduce entire layout');
+  for(const cluster of large){
+   assert.equal(cluster.hexes.length,7);
+   const [q,r]=cluster.hexes[0].split(',').map(Number);
+   const offsets=[[0,0],[1,0],[0,1],[-1,1],[-1,0],[0,-1],[1,-1]];
+   assert.deepEqual(cluster.hexes,offsets.map(([dq,dr])=>[q+dq,r+dr].join(',')));
+  }
+  for(const id of layout.hexes){
+   const [q,r]=id.split(',').map(Number);
+   assert.ok(q>=0&&q<19&&r>=0&&r<13);
+   for(const ship of [{q:2,r:6},{q:16,r:6}]){
+    assert.ok(Math.max(Math.abs(q-ship.q),Math.abs(r-ship.r),Math.abs(q+r-ship.q-ship.r))>1,'Ship clearance violated');
+   }
+  }
+ }
+ assert.ok(seenCounts.size>=8,'Asteroid count must genuinely vary with seed');
+ assert.ok(seenCounts.has(10)&&seenCounts.has(20),'Inclusive 10-20 endpoints must be reachable');
+});
+test('House rule: seeded asteroid maps use the same counts in online Duel, 2v2 and Swarm',()=>{
+ for(const seed of [1,1984,2026,98374]){
+  const duel=c.initial(true,seed),doubles=c.initialDoubles(true,seed),swarm=c.initialSwarm(true,seed);
+  for(const battle of [duel,doubles,swarm]){
+   const layout=c.generateAsteroidField(seed,battle.scenario==='swarm'?[battle.ships.host,...Object.values(battle.fleet)]:[{q:2,r:6},{q:16,r:6}]);
+   assert.ok(layout.counters.filter(x=>x.type==='small').length>=10);
+   assert.ok(layout.counters.filter(x=>x.type==='small').length<=20);
+   assert.equal(c.rocksFor(battle).size,layout.hexes.length);
+  }
+ }
+});
+test('Local setup uses the same randomized small asteroid count and two large clusters',()=>{
+ const local=fs.readFileSync(path.join(__dirname,'../game.html'),'utf8');
+ assert.match(local,/function placeAsteroidCounters\(\)/);
+ assert.match(local,/const total=2\+10\+Math\.floor\(gameRandom\(\)\*11\)/);
+ assert.match(local,/if\(asteroids==='field'\)placeAsteroidCounters\(\)/);
+ assert.doesNotMatch(local,/placeAsteroidCounters\(12\)/);
 });
