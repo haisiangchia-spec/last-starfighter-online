@@ -327,7 +327,10 @@ test('missile hitting an asteroid hex destroys rock and restricts blast to occup
  assert.match(events.join(' '),/ASTEROID DESTROYED/);
 });
 test('line-of-sight blocking applies in 2v2 as in 1v1',()=>{
- const a={q:5,r:3},b={q:9,r:3},rocks=c.rocksFor(c.initial(true));
+ const rocks=c.rocksFor(c.initial(true));
+ const [q,r]=[...rocks][0].split(',').map(Number);
+ const a={q:q-2,r},b={q:q+2,r};
+ assert.ok(c.hexLine(a,b).some(([x,y])=>rocks.has(x+','+y)));
  assert.equal(c.firingBlocked(a,b,rocks),true);
  assert.equal(c.firingBlocked(a,b,new Set()),false);
 });
@@ -1064,7 +1067,7 @@ test('House rule: seeded asteroid maps use the same counts in online Duel, 2v2 a
 test('Local setup uses the same randomized small asteroid count and two large clusters',()=>{
  const local=fs.readFileSync(path.join(__dirname,'../game.html'),'utf8');
  assert.match(local,/function placeAsteroidCounters\(\)/);
- assert.match(local,/const total=2\+10\+Math\.floor\(gameRandom\(\)\*11\)/);
+ assert.match(local,/const total=2\+10\+mixedSeed%11/);
  assert.match(local,/if\(asteroids==='field'\)placeAsteroidCounters\(\)/);
  assert.doesNotMatch(local,/placeAsteroidCounters\(12\)/);
 });
