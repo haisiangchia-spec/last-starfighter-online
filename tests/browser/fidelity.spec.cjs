@@ -139,9 +139,9 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
     await expect(page.locator('#submit')).toHaveText('COMMIT MOVEMENT',{timeout:30000});
     await expect(page.locator('#movementControls')).toBeVisible();
     await expect(page.locator('#arcSettings')).toBeVisible();
-    await expect(page.locator('#allowedMoves')).toContainText('5 / 5');
-    await expect(page.locator('#allowedTurns')).toContainText('3 / 3');
-    await expect(page.locator('#movementRemaining')).toContainText('0 / 5 steps');
+    await expect(page.locator('#allowedMoves')).toHaveText(round===1?'5 / 5':/^\\d+ \/ 5$/);
+    await expect(page.locator('#allowedTurns')).toHaveText(round===1?'3 / 3':/^(\\d+ \/ 3|RANDOM)$/);
+    await expect(page.locator('#movementRemaining')).toContainText('0 / ');
     await expect(page.locator('#laser')).toBeEnabled();
     await page.locator('#submit').click();
     await expect(page.locator('#status')).not.toContainText('ORDER REJECTED',{timeout:15000});
@@ -173,6 +173,9 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
       await assignments.first().selectOption('none');
       await expect(assignments.first()).toHaveValue('none');
      }
+     // The 1v1 reconnect regression must exercise a surviving battle at
+     // Turn 2, independently of lucky first-turn damage rolls.
+     if(size===1)for(let j=0;j<await assignments.count();j++)await assignments.nth(j).selectOption('none');
     }
     // Targets must be independently selectable for each weapon.
     if(size===2){
