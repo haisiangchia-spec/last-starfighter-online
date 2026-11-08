@@ -90,8 +90,22 @@ const isSwarm=s=>s?.scenario==='swarm';
 const swarmIds=()=>Array.from({length:14},(_,i)=>'SW-'+String(i+1).padStart(2,'0'));
 const newSwarmShip=(i)=>({type:'swarm',q:10+Math.floor(i/7)*2,r:3+(i%7),d:0,hp:20,power:20,missiles:0,engine:0,aim:0,hull:0,pilot:0,gunner:0,laserLoss:0,particleLost:true,missileLost:true,dead:false});
 function initialSwarm(asteroids=false,seed=1984){
- const s=initial(asteroids,seed);s.scenario='swarm';s.ships.host={...s.ships.host,q:5,r:6,d:0};
- s.ships.guest=newSwarmShip(0);s.fleet=Object.fromEntries(swarmIds().map((id,i)=>[id,newSwarmShip(i)]));
+ const s=initial(false,seed);
+ s.scenario='swarm';
+ // FASA 1984 p.21: clear space places the Gunstar 5 hexes in and
+ // the east-facing Swarm at x=10/12. With asteroids both teams
+ // occupy opposite short edges and face one another (x=0 vs 16/18).
+ s.ships.host={...s.ships.host,q:asteroids?0:5,r:6,d:0};
+ s.fleet=Object.fromEntries(swarmIds().map((id,i)=>{
+  const fighter=newSwarmShip(i);
+  if(asteroids){fighter.q=16+2*Math.floor(i/7);fighter.d=3}
+  return [id,fighter];
+ }));
+ s.ships.guest={...s.fleet['SW-01']};
+ if(asteroids){
+  const occupied=[s.ships.host,...Object.values(s.fleet)];
+  s.asteroids=generateAsteroidField(seed,occupied);
+ }
  s.log=['SWARM MISSION: Gunstar versus fourteen Ko-Dan contacts. Guest plots each surviving fighter.'];
  return s;
 }
