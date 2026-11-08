@@ -1048,7 +1048,7 @@ test('House rule: every seeded asteroid field has 2 large clusters and 10-20 sma
    assert.equal(cluster.hexes.length,7);
    const [q,r]=cluster.hexes[0].split(',').map(Number);
    const offsets=[[0,0],[1,0],[0,1],[-1,1],[-1,0],[0,-1],[1,-1]];
-   assert.deepEqual(cluster.hexes,offsets.map(([dq,dr])=>[q+dq,r+dr].join(',')));
+   assert.deepEqual(Array.from(cluster.hexes),offsets.map(([dq,dr])=>[q+dq,r+dr].join(',')));
   }
   for(const id of layout.hexes){
    const [q,r]=id.split(',').map(Number);
