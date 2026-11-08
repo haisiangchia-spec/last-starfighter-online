@@ -33,6 +33,20 @@ test('local hot-seat requires separate sealed orders and advances after both pla
  await page.locator('#execute').click();
  await expect(page.locator('#turn')).toHaveText('02',{timeout:30000});
 });
+test('local hot-seat keeps orders sealed and advances through three complete turns',async({page})=>{
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/game.html?scenario=duel&mode=hotseat');
+ for(let round=1;round<=3;round++){
+  await expect(page.locator('#turn')).toHaveText(String(round).padStart(2,'0'));
+  await expect(page.locator('#status')).toContainText('STAR LEAGUE');
+  await page.locator('#execute').click();
+  await expect(page.locator('#status')).toContainText('KO-DAN');
+  await expect(page.locator('#turn')).toHaveText(String(round).padStart(2,'0'));
+  await page.locator('#execute').click();
+  await expect(page.locator('#turn')).toHaveText(String(round+1).padStart(2,'0'),{timeout:30000});
+ }
+ expect(errors).toEqual([]);
+});
 test('local versus-computer duel resolves a complete turn',async({page})=>{
  await page.goto('/game.html?scenario=duel&mode=ai');
  await page.locator('#execute').click();
