@@ -1,9 +1,9 @@
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
-import {getAuth,onAuthStateChanged,signInAnonymously} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,getDoc,setDoc,updateDoc,writeBatch,onSnapshot,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {getAuth,onAuthStateChanged,signInAnonymously,connectAuthEmulator} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import {getFirestore,connectFirestoreEmulator,doc,getDoc,setDoc,updateDoc,writeBatch,onSnapshot,runTransaction,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 import {firebaseConfig} from './firebase-config.js';
 const $=id=>document.getElementById(id),room=(new URLSearchParams(location.hash.slice(1))).get('room')?.toUpperCase();
-const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);if(location.hostname==='127.0.0.1'&&new URLSearchParams(location.search).has('emulator')){connectAuthEmulator(auth,'http://127.0.0.1:9099',{disableWarnings:true});connectFirestoreEmulator(db,'127.0.0.1',8080)}
 let rechargeQueued=false;let lastOrderError='';let uid,role,state,unsubscribe,locked=false,previousState=null,animation=null,swarmPlans={},selectedSwarm='SW-01',mapZoom=1,inspectedSide=null,showTacticalArcs=true;
 // Axial hex facings clockwise, matching the existing local game's directional convention.
 const dirs=[[1,0],[0,1],[-1,1],[-1,0],[0,-1],[1,-1]];
