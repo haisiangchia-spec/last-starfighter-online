@@ -56,7 +56,12 @@ function asteroidCollision(ship,rocks,turn,side,step,speed,events){
  events.push(side.toUpperCase()+' ASTEROID HEX '+ship.q+','+ship.r+': 2D6 '+d1+'+'+d2+'='+(d1+d2)+' VS 6 '+(hit?'COLLISION':'CLEAR'));
  if(hit){
   ship.asteroidImpacts=(ship.asteroidImpacts||0)+1;
-  damageShip(ship,'collision',turn+step*19+index*43,side,events,Math.max(1,Math.min(5,speed)));
+  if(ship.type==='swarm'){
+   ship.dead=true;ship.hp=0;
+   events.push('SWARM SHIP DESTROYED BY ASTEROID COLLISION AT '+ship.q+','+ship.r);
+  }else{
+   damageShip(ship,'collision',turn+step*19+index*43,side,events,Math.max(1,Math.min(5,speed)));
+  }
  }
  return hit;
 }
