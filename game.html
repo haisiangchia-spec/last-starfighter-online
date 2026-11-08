@@ -22,7 +22,8 @@ function placeAsteroidCounters(){
   counters.push({type:'large',hexes:hexes.map(([q,r])=>key(q,r))});
  }
  if(counters.length!==2)throw Error('Unable to place two large asteroid counters');
- const total=2+10+Math.floor(gameRandom()*11);
+ const mixedSeed=Math.imul(rngSeed^(rngSeed>>>16),0x45d9f3b)>>>0;
+ const total=2+10+mixedSeed%11;
  const candidatesSmall=[];
  for(let q=5;q<=13;q++)for(let r=0;r<NR;r++)candidatesSmall.push({q,r});
  for(let i=candidatesSmall.length-1;i>0;i--){let j=Math.floor(gameRandom()*(i+1));[candidatesSmall[i],candidatesSmall[j]]=[candidatesSmall[j],candidatesSmall[i]]}
