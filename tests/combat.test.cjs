@@ -600,3 +600,25 @@ test('Swarm ships with a lost laser cannot fire',()=>{
  const result=c.apply(battle,{host:{plan:'',fire:'none'},guest:{plan:'',fire:'laser',fleetPlans:{}}},'fire');
  assert.equal(result.lastVolley.shots.filter(x=>x.side==='guest').length,13);
 });
+
+test('a single successful laser hit destroys a Swarm Ship without a damage-table survival roll',()=>{
+ const battle=c.initialSwarm(false);
+ battle.ships.host.q=8;battle.ships.host.r=6;battle.ships.host.d=0;
+ for(const [id,ship] of Object.entries(battle.fleet)){
+  if(id!=='SW-01')ship.dead=true;
+ }
+ battle.fleet['SW-01'].q=9;battle.fleet['SW-01'].r=6;
+ const fire={host:{plan:'',fire:'laser',arc:0,targets:{laser1:'SW-01',laser2:'none'}},guest:{plan:'',fire:'none',fleetPlans:{}}};
+ let confirmed=false;
+ for(let turn=1;turn<=25;turn++){
+  battle.turn=turn;
+  const outcome=c.apply(battle,fire,'fire');
+  if(outcome.lastVolley.shots.some(shot=>shot.side==='host'&&shot.hit)){
+   assert.equal(outcome.fleet['SW-01'].dead,true);
+   assert.equal(outcome.fleet['SW-01'].hp,0);
+   assert.ok(outcome.log.some(line=>line.includes('SW-01 DESTROYED')));
+   confirmed=true;break;
+  }
+ }
+ assert.ok(confirmed,'Expected a hit in 25 deterministic turns');
+});
