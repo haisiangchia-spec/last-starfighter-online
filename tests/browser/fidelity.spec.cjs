@@ -52,6 +52,17 @@ test('local AI duel, clear-space Swarm, asteroid Swarm and hot-seat render witho
   const data=await page.evaluate(()=>({...window.__starfighterTestState(),canvas:document.querySelector('canvas').getBoundingClientRect().width}));
   expect(data.ships).toHaveLength(count);expect(data.ships[0].id).toBe('GS-01');
   expect(data.ships[1].d).toBe(facing);expect(data.canvas).toBeGreaterThan(100);
+  if(asteroids==='field'){
+   // House rule: 2x seven-hex clusters + 10–20 distinct single hexes.
+   expect(data.rocks.length).toBeGreaterThanOrEqual(24);
+   expect(data.rocks.length).toBeLessThanOrEqual(34);
+   expect(new Set(data.rocks).size).toBe(data.rocks.length);
+   for(const id of data.rocks){
+    const [q,r]=id.split(',').map(Number);
+    for(const ship of data.ships)
+     expect(Math.max(Math.abs(q-ship.q),Math.abs(r-ship.r),Math.abs(q+r-ship.q-ship.r))).toBeGreaterThan(1);
+   }
+  }
   if(scenario==='swarm'){
    expect(data.ships.slice(1,8).map(s=>s.r)).toEqual([3,4,5,6,7,8,9]);
    expect(data.ships.slice(8).map(s=>s.r)).toEqual([3,4,5,6,7,8,9]);
@@ -132,6 +143,9 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
   const asteroidLabels=await Promise.all(pilots.map(async({page})=>(await page.locator('#asteroidSync').textContent()).trim()));
   expect(new Set(asteroidLabels).size).toBe(1);
   expect(asteroidLabels[0]).toMatch(/^ASTEROID FIELD ACTIVE · [0-9]+ ROCKS$/);
+  const rockCount=Number(asteroidLabels[0].match(/(\\d+) ROCKS$/)[1]);
+  expect(rockCount).toBeGreaterThanOrEqual(24);
+  expect(rockCount).toBeLessThanOrEqual(34);
   if(size===2){for(const {page} of pilots){await expect(page.locator('#fleetStatus')).toBeVisible();for(const ship of ['GS-01','GS-02','DF-01','DF-02'])await expect(page.locator('#fleetStatus')).toContainText(ship)}}
   // Each round now has two synchronized commits: sealed movement, then targets.
   async function playRound(round){
