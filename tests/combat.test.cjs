@@ -996,3 +996,27 @@ test('FASA p21: asteroid Swarm waves face Gunstar from opposite short edges',()=
   assert.equal(battle.ships.guest.d,3);
  }
 });
+
+test('FASA p19: Gunstar can deliberately clear an empty asteroid hex in Swarm engine',()=>{
+ const base=c.initialSwarm(false,1984);
+ base.asteroids=['7,6'];
+ base.ships.host.q=5;base.ships.host.r=6;base.ships.host.d=0;
+ for(const ship of Object.values(base.fleet)){ship.q=15;ship.r=ship.r;ship.d=3}
+ const target='asteroid:7,6';
+ assert.ok(c.weaponTargets(base,'host','missile',0,0,{arc:0}).some(t=>t.id===target));
+ let cleared=false;
+ for(let turn=1;turn<70;turn++){
+  const battle=structuredClone(base);battle.turn=turn;
+  const result=c.apply(battle,{
+   host:{plan:'',fire:'missile',arc:0,targets:{missile1:target}},
+   guest:{plan:'',fire:'none',fleetPlans:{}}
+  },'fire');
+  assert.equal(result.ships.host.missiles,3);
+  if(!result.asteroids.includes('7,6')){
+   assert.ok(result.log.some(x=>x.includes('MISSILE DESTROYS ASTEROID AT 7,6')));
+   assert.ok(result.lastVolley.shots.some(x=>x.kind==='missile'&&x.hit));
+   cleared=true;break;
+  }
+ }
+ assert.ok(cleared,'Swarm engine resolves hit and removes an empty asteroid hex');
+});
