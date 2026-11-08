@@ -73,6 +73,24 @@ for(const size of [1,2])test('real Firebase emulator human '+size+'v'+size+' sea
   }
   await pilots[0].page.locator('#resolve').click();
   for(const {page} of pilots)await expect(page.locator('#turn')).toHaveText('2',{timeout:30000});
+  // A reconnecting pilot must recover the authoritative battle and match identity.
+  const reconnect=pilots[pilots.length-1].page;
+  await reconnect.reload();
+  await expect(reconnect.locator('#turn')).toHaveText('2',{timeout:30000});
+  await expect(reconnect.locator('#asteroidSync')).toContainText('ASTEROID FIELD ACTIVE');
+  // Continue for two more rounds; catches stale order IDs, subscriptions and reset flags.
+  for(const round of [2,3]){
+   for(const {page} of pilots){
+    await expect(page.locator('#submit')).toBeEnabled({timeout:20000});
+    await page.locator('#submit').click();
+   }
+   for(const {page} of pilots){
+    await expect(page.locator('#hostOrder')).toContainText('SEALED',{timeout:20000});
+    await expect(page.locator('#guestOrder')).toContainText('SEALED',{timeout:20000});
+   }
+   await pilots[0].page.locator('#resolve').click();
+   for(const {page} of pilots)await expect(page.locator('#turn')).toHaveText(String(round+1),{timeout:30000});
+  }
   for(const {errors} of pilots)expect(errors).toEqual([]);
  }finally{await Promise.all(pilots.map(p=>p.context.close()))}
 });
