@@ -446,7 +446,9 @@ test('shared local AI map supports click-to-inspect and firing arc toggling',asy
   const R=Math.min((c.width-50)/(Math.sqrt(3)*(19+13/2)),(c.height-50)/(1.5*13+.5));
   const cx=c.width/2-Math.sqrt(3)*(19/2+13/4)*R,cy=c.height/2-1.5*(13-1)/2*R;
   const p=window.__localBattleTest.state().ships.host;
-  return {x:b.left+(cx+Math.sqrt(3)*(p.q+p.r/2)*R)*b.width/c.width,y:b.top+(cy+1.5*p.r*R)*b.height/c.height};
+  const scale=Math.min(b.width/c.width,b.height/c.height);
+  const dx=(b.width-c.width*scale)/2,dy=(b.height-c.height*scale)/2;
+  return {x:b.left+dx+(cx+Math.sqrt(3)*(p.q+p.r/2)*R)*scale,y:b.top+dy+(cy+1.5*p.r*R)*scale};
  });
  await page.mouse.click(x,y);
  await expect(page.locator('#inspectDialog')).toBeVisible();
