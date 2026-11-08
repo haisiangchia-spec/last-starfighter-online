@@ -339,4 +339,4 @@ for(const id of ['laser','particle','missile'])$(id).addEventListener('change',(
 $('resolve').disabled=true;
 $('localScenario').value=scenario;$('localAsteroids').value=asteroids?'on':'off';$('localSeed').value=seed;
 start();
-window.__localBattleTest={state:()=>structuredClone(state),restart:start,aiOrders,advance:()=>$('submit').click(),setGunstarPower:value=>{if(!params.has('battle_test'))throw Error('Test fixture disabled');player().power=value;render()}};
+window.__localBattleTest={state:()=>structuredClone(state),restart:start,aiOrders,advance:()=>$(state?.phase==='targeting'?'fireSubmit':'submit').click(),setGunstarPower:value=>{if(!params.has('battle_test'))throw Error('Test fixture disabled');player().power=value;render()}};
