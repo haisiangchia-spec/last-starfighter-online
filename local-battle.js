@@ -321,7 +321,8 @@ function draw(){
   ctx.restore();
  }
  mark(a.q,a.r,a.d,route?'GS-01 · START':'GS-01','#66f7ff',a.dead);
- for(const t of enemy()){
+ const displayedEnemies=moving&&isSwarm(state)?Object.entries(state.movementReplay?.starts||{}).filter(([id])=>id.startsWith('SW-')).map(([id,sh])=>({id,...sh})):enemy();
+ for(const t of displayedEnemies){
   const pos=moving?replayShip(t.id==='DF-01'?'guest':t.id):null;
   const sh=pos||t;
   mark(sh.q,sh.r,sh.d,t.id,'#ff657c',sh.dead);
