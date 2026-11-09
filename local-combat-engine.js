@@ -586,9 +586,9 @@ function applySwarm(s,orders,stage='full'){
    const [dq,dr]=dirs[ship.d];ship.q+=dq;ship.r+=dr;
    if(steps[i]==='L')ship.d=(ship.d+5)%6;
    if(steps[i]==='R')ship.d=(ship.d+1)%6;
-   if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(id+' LEFT STARFIELD · LOST');captureMovementTrace(movementTrace,id,ship,i,events.slice(eventStart));break}
+   if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(id+' LEFT STARFIELD · LOST');captureMovementTrace(movementTrace,id==='GS-01'?'host':id,ship,i,events.slice(eventStart));break}
    if(rocks.has(rockKey(ship.q,ship.r)))asteroidCollision(ship,rocks,s.turn+index*101,side,i,steps.length,events);
-   captureMovementTrace(movementTrace,id,ship,i,events.slice(eventStart));
+   captureMovementTrace(movementTrace,id==='GS-01'?'host':id,ship,i,events.slice(eventStart));
    if(ship.dead)break;
   }
   events.push(id+' VECTOR '+(steps.join('')||'HOLD')+' · HEX '+ship.q+','+ship.r);
