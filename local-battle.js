@@ -7,6 +7,7 @@ const randomSeed=()=>{if(typeof crypto!=='undefined'&&crypto.getRandomValues){co
 let asteroids=params.get('asteroids')!=='off',seed=Number(params.get('seed'))||randomSeed();
 let state, movementOrders=null, targetDraft={}, zoom=1, showArcs=true;
 let volleyQueue=[], volleyIndex=-1, volleyTimer=null;
+let moving=false, movementFrame=-1, movementTimer=null;
 let blossomMode=false,blossomArcs=Array(6).fill(0),blossomMissiles=Array(6).fill(false),blossomTargets=Array.from({length:6},()=>({}));
 const face=['EAST','SOUTHEAST','SOUTHWEST','WEST','NORTHWEST','NORTHEAST'];
 const player=()=>state?.ships.host;
@@ -54,7 +55,43 @@ function playVolley(shots){
   draw();volleyTimer=setTimeout(next,650);
  };next();
 }
+
+function stopMovementReplay(){
+ if(movementTimer!==null)clearTimeout(movementTimer);
+ movementTimer=null;moving=false;movementFrame=-1;
+}
+function replayShip(id){
+ const replay=state?.movementReplay;
+ const path=replay?.paths?.[id]||[];
+ if(!moving||!replay)return null;
+ if(movementFrame<0)return replay.starts[id]||null;
+ return path[Math.min(movementFrame,path.length-1)]||replay.starts[id]||null;
+}
+function beginMovementReplay(){
+ const replay=state?.movementReplay;
+ if(!replay?.maxSteps){stopMovementReplay();render();return}
+ stopMovementReplay();moving=true;movementFrame=-1;render();
+ const tick=()=>{
+  movementFrame++;
+  if(movementFrame>=replay.maxSteps){
+   stopMovementReplay();set('movementStatus','MOVEMENT COMPLETE · '+replay.maxSteps+' SIMULTANEOUS STEP(S)');render();return;
+  }
+  const collisions=Object.entries(replay.paths).flatMap(([id,path])=>{
+   const p=path[movementFrame];
+   return p?.collision?[{id,p}]:[];
+  });
+  const impacts=collisions.filter(x=>x.p.impact);
+  set('movementStatus','MOVEMENT STEP '+(movementFrame+1)+' / '+replay.maxSteps+
+   (impacts.length?' · COLLISION: '+impacts.map(x=>x.id).join(', '):collisions.length?' · ASTEROID CHECK · CLEAR':''));
+  set('movementDamage',impacts.map(x=>x.id+' · '+(x.p.messages.join(' | ')||'ASTEROID IMPACT')).join(' / '));
+  draw();
+  movementTimer=setTimeout(tick,impacts.length?1150:650);
+ };
+ movementTimer=setTimeout(tick,450);
+}
+
 function start(mode='random'){
+ stopMovementReplay();
  stopVolley();set('fireStatus','FIRE EFFECTS APPEAR HERE WHEN VOLLEY RESOLVES');
  scenario=$('localScenario').value;asteroids=$('localAsteroids').value==='on';
  if(mode==='manual'){
@@ -78,7 +115,7 @@ function beginTargeting(){
  movementOrders={host:our,guest:ai};
  state=apply(state,movementOrders,'move');
  if(state.phase==='targeting'){targetDraft={};message('MOVEMENT RESOLVED · ASSIGN WEAPON TARGETS')}
- $('plan').value='';render();
+ $('plan').value='';beginMovementReplay();
 }
 function firingTargets(){
  const ship=player(),raw=chosenWeapons();
@@ -142,7 +179,7 @@ function blossomRows(){
  return rows.join('');
 }
 function commitFiring(){
- if(!state||state.phase!=='targeting')return;
+ if(moving||!state||state.phase!=='targeting')return;
  const host={...movementOrders.host,fire:chosenWeapons(),targets:targetDraft};
  if(blossomMode){host.fire='blossom';host.blossomArcs=blossomArcs;host.blossomMissiles=blossomMissiles;host.blossomTargets=blossomTargets}
  else if($('recharge').dataset.queued==='true'){host.fire='guard';host.targets={}}
@@ -167,15 +204,17 @@ function render(){
  set('identity','LOCAL AI · '+(scenario==='swarm'?'1v14 SWARM':'1v1 DUEL'));
  set('turn',state.turn);set('quickTurn','TURN '+state.turn+' · '+(ordersPhase?'MOVEMENT':phase==='targeting'?'TARGETING':phase.toUpperCase()));
  set('quickShip','GS-01 · STAR LEAGUE');set('quickResources','POWER '+ship.power+'/20 · HULL '+ship.hp+'/20 · MISSILES '+ship.missiles);
- set('phaseLabel',ordersPhase?'MOVEMENT · PLOT VECTOR':phase==='targeting'?'TARGETING · SELECT WEAPON TARGETS':'BATTLE COMPLETE');
- set('phaseHelp',ordersPhase?'Plot your Gunstar vector; AI orders resolve simultaneously.':phase==='targeting'?'Choose targets after all ships move.':'Start a new mission.');
+ set('phaseLabel',moving?'MOVEMENT · EXECUTING':ordersPhase?'MOVEMENT · PLOT VECTOR':phase==='targeting'?'TARGETING · SELECT WEAPON TARGETS':'BATTLE COMPLETE');
+ set('phaseHelp',moving?'Ships advance together, one hex per step.':ordersPhase?'Plot your Gunstar vector; AI orders resolve simultaneously.':phase==='targeting'?'Choose targets after all ships move.':'Start a new mission.');
  $('movementControls').hidden=!ordersPhase;$('arcSettings').hidden=!ordersPhase;$('targetingPanel').hidden=phase!=='targeting';
  $('plan').disabled=!ordersPhase;
  for(const id of ['addF','addL','addR','undoPlan','clearPlan'])$(id).disabled=!ordersPhase;
  $('movementCommitWrap').hidden=!ordersPhase;
  $('fireCommitWrap').hidden=phase!=='targeting';
  $('submit').disabled=!ordersPhase;
- $('fireSubmit').disabled=phase!=='targeting';
+ $('fireSubmit').disabled=phase!=='targeting'||moving;
+ $('fireCommitWrap').hidden=phase!=='targeting'||moving;
+ $('targetingPanel').hidden=phase!=='targeting'||moving;
  $('recharge').disabled=phase!=='targeting'||blossomMode||!!movementOrders?.host?.plan?.length||scenario==='swarm'&&!!ship.blossomRecharge;
  $('blossom').disabled=scenario!=='swarm'||phase!=='targeting'||(!blossomMode&&(ship.power<4||ship.power>10||!!ship.blossomRecharge||ship.gunner>=6||ship.unconsciousGunner===1));
  $('blossom').title='Death Blossom: six clockwise volleys, then mandatory recharge';
@@ -238,7 +277,7 @@ function draw(){
  const point=(q,r)=>[cx+Math.sqrt(3)*(q+r/2)*R,cy+1.5*r*R];
  const hex=(q,r,color,stroke='#174255')=>{const [x,y]=point(q,r);ctx.beginPath();for(let k=0;k<6;k++){const a=Math.PI/3*k+Math.PI/6;k?ctx.lineTo(x+R*.92*Math.cos(a),y+R*.92*Math.sin(a)):ctx.moveTo(x+R*.92*Math.cos(a),y+R*.92*Math.sin(a))}ctx.closePath();ctx.fillStyle=color;ctx.fill();ctx.strokeStyle=stroke;ctx.stroke()};
  for(let q=0;q<NQ;q++)for(let r=0;r<NR;r++)hex(q,r,'#081829');
- if(showArcs&&!player().dead){
+ if(showArcs&&!moving&&!player().dead){
   const ship=player(),arc=Number($('arc').value)||0;
   const allowed=({0:[5,0,1],1:[0,1,2],5:[4,5,0],3:[2,3,4]})[arc]||[5,0,1];
   for(let q=0;q<NQ;q++)for(let r=0;r<NR;r++){
@@ -253,7 +292,7 @@ function draw(){
  }
  for(const key of rocksFor(state)){const [q,r]=key.split(',').map(Number);hex(q,r,'#684821','#c89550')}
  const mark=(q,r,d,label,color,dead=false)=>{if(dead)return;const [x,y]=point(q,r);const angle=d*Math.PI/3,rx=R*.5;ctx.save();ctx.translate(x,y);ctx.rotate(angle);ctx.fillStyle=color;ctx.beginPath();ctx.moveTo(rx,0);ctx.lineTo(-rx*.7,-rx*.58);ctx.lineTo(-rx*.7,rx*.58);ctx.closePath();ctx.fill();ctx.restore();ctx.fillStyle=color;ctx.font='bold '+Math.max(9,R*.4)+'px monospace';ctx.textAlign='center';ctx.fillText(label,x,y-R*.8)};
- const a=player();
+ const a=moving?replayShip('host'):player();
  // Plot a live, uncommitted movement route on the tactical map. Each F/L/R
  // moves one hex *before* changing the heading, exactly as predict() does.
  // Keep the original ship visible: a cyan ghost marks the current planned
@@ -282,7 +321,22 @@ function draw(){
   ctx.restore();
  }
  mark(a.q,a.r,a.d,route?'GS-01 · START':'GS-01','#66f7ff',a.dead);
- for(const t of enemy())mark(t.q,t.r,t.d,t.id,'#ff657c',t.dead);
+ for(const t of enemy()){
+  const pos=moving?replayShip(t.id==='DF-01'?'guest':t.id):null;
+  const sh=pos||t;
+  mark(sh.q,sh.r,sh.d,t.id,'#ff657c',sh.dead);
+ }
+ if(moving&&movementFrame>=0){
+  const replay=state.movementReplay;
+  for(const [id,path] of Object.entries(replay.paths)){
+   const sh=path[movementFrame];if(!sh?.collision)continue;
+   const [x,y]=point(sh.q,sh.r);
+   if(x<0||x>w||y<0||y>h)continue;
+   ctx.save();ctx.strokeStyle=sh.impact?'#ff4d52':'#ffd47c';ctx.fillStyle=sh.impact?'rgba(250,38,48,.35)':'rgba(255,191,81,.2)';ctx.lineWidth=6;ctx.shadowBlur=20;ctx.shadowColor=ctx.strokeStyle;
+   ctx.beginPath();ctx.arc(x,y,R*(sh.impact?.85:.54),0,Math.PI*2);ctx.fill();ctx.stroke();
+   ctx.shadowBlur=0;ctx.font='bold '+Math.max(12,R*.4)+'px monospace';ctx.textAlign='center';ctx.fillStyle='#fff4dc';ctx.fillText(id+(sh.impact?' IMPACT':' CLEAR'),x,y-R*1.15);ctx.restore();
+  }
+ }
  // Repaint the last resolved shot over the final ship positions, never a fabricated outcome.
  if(volleyIndex>=0&&volleyQueue[volleyIndex]){
   const s=volleyQueue[volleyIndex],start=point(s.from.q,s.from.r);
@@ -297,12 +351,13 @@ function draw(){
   ctx.save();ctx.shadowColor=color;ctx.shadowBlur=18;ctx.strokeStyle=color;ctx.lineWidth=Math.max(4,R*.16);ctx.beginPath();ctx.moveTo(...start);ctx.lineTo(...end);ctx.stroke();
   ctx.shadowBlur=0;ctx.fillStyle=s.hit?'#aaffcb':'#ffdd94';ctx.font='bold '+Math.max(16,R*.58)+'px monospace';ctx.textAlign='center';ctx.fillText(s.hit?'HIT':'MISS',end[0],end[1]-R*.75);ctx.restore();
  }
- if(route?.length>1){
+ if(!moving&&route?.length>1){
   const final=route[route.length-1];
   mark(final.q,final.r,final.d,'PLANNED · '+plan.length,'#76ffe0',a.dead);
  }
 }
 $('map').onclick=e=>{
+ if(moving)return;
  const canvas=$('map'),rect=canvas.getBoundingClientRect();
  const scale=Math.min(rect.width/canvas.width,rect.height/canvas.height);
  const marginX=(rect.width-canvas.width*scale)/2,marginY=(rect.height-canvas.height*scale)/2;
