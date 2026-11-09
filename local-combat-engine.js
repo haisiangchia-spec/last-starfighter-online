@@ -258,6 +258,27 @@ function damageEffects(ship,before,side,events){
 }
 function damageShip(ship,kind,turn,side,events,collisionTable=null){const before={...ship};const salt=teamSide(side)==='host'?19:47;const red=roll(turn*1009+salt),white=roll(turn*3001+salt),table=collisionTable??Math.max(1,Math.min(6,red+(kind==='particle'?1:kind==='missile'?-1:0))),code=damageRows[table-1][white-1];events.push(`${teamSide(side)==='host'?'STAR LEAGUE':'KO-DAN'} DAMAGE ${collisionTable?'COLLISION SPEED '+collisionTable:'RED '+red} WHITE ${white} → TABLE ${table}: ${code}`);for(const part of code.split(',')){const c=part[0],n=Number(part.slice(1))||1;if(c==='F')ship.hull=(ship.hull||0)+n;if(c==='E')ship.engine=(ship.engine||0)+n;if(c==='P'){ship.power=Math.max(0,(ship.power??20)-n);ship.powerPlantHitThisTurn=true}if(c==='T')ship.aim=(ship.aim||0)+1;if(c==='W'){const crew=teamSide(side)==='host'&&roll(turn*587+salt)>3?'gunner':'pilot';const previous=ship[crew]||0;ship[crew]=previous+1;crewInjuryCheck(ship,crew,previous,turn,salt,events,side)}if(c==='K'){const crew=teamSide(side)==='host'&&roll(turn*593+salt)>3?'gunner':'pilot';ship[crew]=6;if(crew==='pilot')ship.killedSpeed=ship.lastMove??0;ship[crew==='pilot'?'unconsciousPilot':'unconsciousGunner']=0}if(c==='D')ship.dead=true;if(c==='X'){const z=roll(turn*511+salt),maxLasers=teamSide(side)==='host'?2:3;if(z<=2){if((ship.laserLoss||0)<maxLasers)ship.laserLoss=(ship.laserLoss||0)+1;else events.push(side.toUpperCase()+' ALL LASER TURRETS ALREADY DESTROYED')}else if(z<=4){if(ship.particleLost)events.push(side.toUpperCase()+' PARTICLE CANNON ALREADY DESTROYED');ship.particleLost=true}else{if(ship.missileLost)events.push(side.toUpperCase()+' MISSILE RACK ALREADY DESTROYED');ship.missileLost=true}events.push(side.toUpperCase()+' WEAPON DESTRUCTION DIE '+z+' → '+(z<=2?'LASER':z<=4?'PARTICLE':'MISSILE'))}if(c==='L'){if(!ship.life)ship.life=6;else events.push(side.toUpperCase()+' REPEATED LIFE SUPPORT HIT · NO ADDITIONAL EFFECT')}if(c==='R')ship.nextRestrict=(ship.nextRestrict||0)+1;if(c==='S')ship.nextStabilizer=(ship.nextStabilizer||0)+1;if(c==='H')ship.nextHalf=(ship.nextHalf||0)+1;if(c==='N')ship.nextConstant=(ship.nextConstant||0)+1}ship.hp=Math.max(0,20-(ship.hull||0));if((ship.hull||0)>=20||(ship.engine||0)>=10)ship.dead=true;if(ship.dead)ship.hp=0;const name=side==='host'?'GS-01':side==='host2'?'GS-02':side==='guest2'?'DF-02':'DF-01';const changes=[['FUSELAGE','hull'],['ENGINE','engine'],['POWER','power'],['TARGETING','aim'],['PILOT','pilot'],['GUNNER','gunner'],['LASERS LOST','laserLoss'],['MISSILES','missiles']].filter(([,k])=>(ship[k]??0)!==(before[k]??0)).map(([label,k])=>label+' '+(before[k]??0)+' → '+(ship[k]??0));for(const [label,k] of [['PARTICLE CANNON','particleLost'],['MISSILE RACK','missileLost'],['DESTROYED','dead']])if(!!ship[k]!==!!before[k])changes.push(label+' '+(ship[k]?'YES':'NO'));for(const [label,k] of [['STEERING RESTRICTION','nextRestrict'],['STABILIZER','nextStabilizer'],['HALF SPEED','nextHalf'],['NO SPEED CHANGE','nextConstant'],['LIFE SUPPORT','life']])if((ship[k]??0)!==(before[k]??0))changes.push(label+' '+(before[k]??0)+' → '+(ship[k]??0));events.push(name+' DAMAGE RESULT: '+(changes.join(' · ')||'NO ADDITIONAL SYSTEM EFFECT'));damageEffects(ship,before,side,events);}
 
+
+// Presentation-only trace recorded from the authoritative movement resolution.
+// Each vessel's position is captured after every entered hex, including collisions.
+function newMovementTrace(battle){
+ const starts={host:movementTraceShip(battle.ships.host)};
+ if(isSwarm(battle)){for(const [id,ship] of Object.entries(battle.fleet||{}))starts[id]=movementTraceShip(ship)}
+ else for(const [id,ship] of Object.entries(battle.ships))if(id!=='host')starts[id]=movementTraceShip(ship);
+ return {starts,paths:{},maxSteps:0};
+}
+function movementTraceShip(ship){
+ return {q:ship.q,r:ship.r,d:ship.d,dead:!!ship.dead,hull:ship.hull||0,engine:ship.engine||0,power:ship.power||0,hp:ship.hp||0};
+}
+function captureMovementTrace(trace,id,ship,step,eventLines){
+ if(!trace)return;
+ const collision=eventLines.filter(line=>line.includes(' ASTEROID HEX '));
+ const damage=eventLines.filter(line=>line.includes(' DAMAGE ')||line.includes(' DAMAGE RESULT:')||line.includes(' DESTROYED BY ASTEROID'));
+ const entry={...movementTraceShip(ship),collision:collision.length>0,impact:collision.some(x=>x.includes('COLLISION')),messages:[...collision,...damage]};
+ (trace.paths[id]??=[])[step]=entry;
+ trace.maxSteps=Math.max(trace.maxSteps,step+1);
+}
+
 function targetingSnapshot(out,orders,events){
  // Movement and asteroid collisions can decide the match before target declaration.
  const defeated=side=>{
@@ -362,7 +383,7 @@ function declaredTarget(battle,slot,order,kind,i,arc,legacyTarget){
  return legacyTarget||legal[0]||null;
 }
 function applyDoubles(s,orders,stage='full'){
- const out=structuredClone(s),events=['TURN '+s.turn+' / 2v2'],shots=[],hits=Object.fromEntries(battleSlots.map(x=>[x,[]])),rocks=rocksFor(out);
+ const out=structuredClone(s),events=['TURN '+s.turn+' / 2v2'],movementTrace=stage==='fire'?null:newMovementTrace(s),shots=[],hits=Object.fromEntries(battleSlots.map(x=>[x,[]])),rocks=rocksFor(out);
  const weapons={laser:{range:10,base:3},particle:{range:9,base:4},missile:{range:8,base:5}};
  if(stage!=='fire')for(const slot of battleSlots){
   const ship=out.ships[slot],order=orders[slot],label=slot.toUpperCase();
@@ -373,18 +394,18 @@ function applyDoubles(s,orders,stage='full'){
   if(ship.stabilizer||ship.pilot>=6)steps=steps.map((_,i)=>{const d=roll(s.turn*1709+battleSlots.indexOf(slot)*47+i*79);return d<=2?'L':d<=4?'F':'R'});
   ship.lastMove=steps.length;
   for(let i=0;i<steps.length;i++){
+   const eventStart=events.length;
    const [dq,dr]=dirs[ship.d];ship.q+=dq;ship.r+=dr;
    if(steps[i]==='L')ship.d=(ship.d+5)%6;
    if(steps[i]==='R')ship.d=(ship.d+1)%6;
-   if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(label+' LEFT STARFIELD · LOST');break}
-   if(rocks.has(rockKey(ship.q,ship.r))){
-    asteroidCollision(ship,rocks,s.turn,slot,i,steps.length,events);
-    if(ship.dead)break;
-   }
+   if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(label+' LEFT STARFIELD · LOST');captureMovementTrace(movementTrace,slot,ship,i,events.slice(eventStart));break}
+   if(rocks.has(rockKey(ship.q,ship.r)))asteroidCollision(ship,rocks,s.turn,slot,i,steps.length,events);
+   captureMovementTrace(movementTrace,slot,ship,i,events.slice(eventStart));
+   if(ship.dead)break;
   }
   events.push(label+' VECTOR '+(steps.join('')||'HOLD')+' · HEX '+ship.q+','+ship.r);
  }
- if(stage==='move')return targetingSnapshot(out,orders,events);
+ if(stage==='move'){out.movementReplay=movementTrace;return targetingSnapshot(out,orders,events);}
  // Snapshot post-movement positions. Damage from all attacks is deferred until every fighter fires.
  for(const slot of battleSlots){
   const ship=out.ships[slot],o=orders[slot],label=slot.toUpperCase();
@@ -453,7 +474,7 @@ function applyDoubles(s,orders,stage='full'){
 
 function apply(s,orders,stage='full'){
  if(s.scenario==='doubles')return applyDoubles(s,orders,stage);
- const out=structuredClone(s),events=[`TURN ${s.turn}`];
+ const out=structuredClone(s),events=[`TURN ${s.turn}`],movementTrace=stage==='fire'?null:newMovementTrace(s);
  if(isSwarm(s))return applySwarm(s,orders,stage);
  if(stage!=='fire')for(const side of ['host','guest']){
   const ship=out.ships[side],o=orders[side],label=teamSide(side)==='host'?'STAR LEAGUE':'KO-DAN',plan=o.plan??(o.move==='hold'?'':o.move);
@@ -467,17 +488,18 @@ function apply(s,orders,stage='full'){
   ship.lastMove=steps.length;
   const rocks=rocksFor(out);
   for(let i=0;i<steps.length;i++){
+   const eventStart=events.length;
    const [dq,dr]=dirs[ship.d];ship.q+=dq;ship.r+=dr;
    if(steps[i]==='L')ship.d=(ship.d+5)%6;
    if(steps[i]==='R')ship.d=(ship.d+1)%6;
-   if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(label+' LEFT STARFIELD · LOST');break}
-   if(!rocks.has(rockKey(ship.q,ship.r)))continue;
-   asteroidCollision(ship,rocks,s.turn,side,i,steps.length,events);
+   if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(label+' LEFT STARFIELD · LOST');captureMovementTrace(movementTrace,side,ship,i,events.slice(eventStart));break}
+   if(rocks.has(rockKey(ship.q,ship.r)))asteroidCollision(ship,rocks,s.turn,side,i,steps.length,events);
+   captureMovementTrace(movementTrace,side,ship,i,events.slice(eventStart));
    if(ship.dead)break;
   }
   events.push(label+' VECTOR '+(steps.join('')||'HOLD')+' · HEX '+ship.q+','+ship.r+' · FACING '+ship.d);
  }
- if(stage==='move')return targetingSnapshot(out,orders,events);
+ if(stage==='move'){out.movementReplay=movementTrace;return targetingSnapshot(out,orders,events);}
  // All volleys use post-movement positions, with damage applied only after both sides fire.
  const firingRocks=rocksFor(out);
  const hits={host:[],guest:[]},shots=[],weaponData={laser:{range:10,base:3},particle:{range:9,base:4},missile:{range:8,base:5}};
@@ -545,7 +567,7 @@ function apply(s,orders,stage='full'){
 }
 
 function applySwarm(s,orders,stage='full'){
- const out=structuredClone(s),events=['TURN '+s.turn+' / 1v14 SWARM'],shots=[],rocks=rocksFor(out);
+ const out=structuredClone(s),events=['TURN '+s.turn+' / 1v14 SWARM'],movementTrace=stage==='fire'?null:newMovementTrace(s),shots=[],rocks=rocksFor(out);
  const gun=out.ships.host,host=orders.host,guest=orders.guest;
  const fighters=activeFleet(out);
  // Each vessel plots independently, resolves each entered asteroid hex, and can leave the board.
@@ -560,15 +582,14 @@ function applySwarm(s,orders,stage='full'){
   if(ship.stabilizer||ship.pilot>=6)steps=steps.map((_,i)=>{const die=roll(s.turn*1709+index*47+i*79);return die<=2?'L':die<=4?'F':'R'});
   ship.lastMove=steps.length;
   for(let i=0;i<steps.length;i++){
+   const eventStart=events.length;
    const [dq,dr]=dirs[ship.d];ship.q+=dq;ship.r+=dr;
    if(steps[i]==='L')ship.d=(ship.d+5)%6;
    if(steps[i]==='R')ship.d=(ship.d+1)%6;
-   if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(id+' LEFT STARFIELD · LOST');break}
-   if(rocks.has(rockKey(ship.q,ship.r))){
-    // Distinct deterministic dice for all fourteen fighters.
-    asteroidCollision(ship,rocks,s.turn+index*101,side,i,steps.length,events);
-    if(ship.dead)break;
-   }
+   if(ship.q<0||ship.q>=NQ||ship.r<0||ship.r>=NR){ship.dead=true;ship.hp=0;events.push(id+' LEFT STARFIELD · LOST');captureMovementTrace(movementTrace,id,ship,i,events.slice(eventStart));break}
+   if(rocks.has(rockKey(ship.q,ship.r)))asteroidCollision(ship,rocks,s.turn+index*101,side,i,steps.length,events);
+   captureMovementTrace(movementTrace,id,ship,i,events.slice(eventStart));
+   if(ship.dead)break;
   }
   events.push(id+' VECTOR '+(steps.join('')||'HOLD')+' · HEX '+ship.q+','+ship.r);
  }
@@ -577,7 +598,7 @@ function applySwarm(s,orders,stage='full'){
  for(let i=0;i<fighters.length;i++){const [id,ship]=fighters[i];travel(ship,guest.fleetPlans?.[id]||'',id,'guest',i+1)}
  travel(gun,host.plan,'GS-01','host',0);
  }
- if(stage==='move')return targetingSnapshot(out,orders,events);
+ if(stage==='move'){out.movementReplay=movementTrace;return targetingSnapshot(out,orders,events);}
  const live=()=>activeFleet(out);
  // Record the complete volley before applying weapon damage, preserving simultaneous fire.
  const hits={host:[],...Object.fromEntries(swarmIds().map(id=>[id,[]]))};
